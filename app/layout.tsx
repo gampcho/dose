@@ -3,6 +3,8 @@ import { Geist_Mono, Source_Sans_3, Public_Sans } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
+import { Toaster } from "@/components/ui/sonner"
+import { TooltipProvider } from "@/components/ui/tooltip"
 
 const publicSansHeading = Public_Sans({
   subsets: ["latin"],
@@ -37,7 +39,10 @@ export default function RootLayout({
       )}
     >
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <TooltipProvider>{children}</TooltipProvider>
+        </ThemeProvider>
+        <Toaster />
       </body>
     </html>
   )
