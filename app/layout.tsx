@@ -39,7 +39,7 @@ export default function RootLayout({
       )}
     >
       <body>
-        <ThemeProvider>
+        <ThemeProvider defaultTheme="light">
           <TooltipProvider>{children}</TooltipProvider>
         </ThemeProvider>
         <Toaster />
