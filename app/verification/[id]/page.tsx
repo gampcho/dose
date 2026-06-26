@@ -14,21 +14,17 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { getPlan } from "@/lib/storage"
-import type { TreatmentPlan, MedicationSession } from "@/lib/types"
-
-const SESSION_LABELS: Record<MedicationSession, string> = {
-  morning: "Sáng",
-  noon: "Trưa",
-  afternoon: "Chiều",
-  evening: "Tối",
-}
+import type { TreatmentPlan } from "@/lib/types"
+import { SESSION_LABELS } from "@/lib/types"
 
 export default function VerificationPage() {
   const params = useParams()
   const router = useRouter()
   const planId = params.id as string
 
-  const [plan] = React.useState<TreatmentPlan | null>(() => getPlan(planId) ?? null)
+  const [plan] = React.useState<TreatmentPlan | null>(
+    () => getPlan(planId) ?? null,
+  )
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -58,22 +54,27 @@ export default function VerificationPage() {
       {/* Header */}
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-3">
-          <Button variant="ghost" size="icon-sm" onClick={() => router.push("/")}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => router.push("/")}
+          >
             <RiArrowLeftLine />
           </Button>
           <div>
-            <p className="font-heading text-base font-semibold leading-tight">{plan.name}</p>
+            <p className="font-heading text-base leading-tight font-semibold">
+              {plan.name}
+            </p>
             <p className="text-xs text-muted-foreground">Kiểm tra khay thuốc</p>
           </div>
         </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-8">
-
         {/* Medication chips */}
         {plan.medications.length > 0 && (
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Thuốc trong liệu trình
             </p>
             <div className="flex flex-wrap gap-2">
@@ -85,7 +86,13 @@ export default function VerificationPage() {
                   <RiCapsuleLine className="size-3.5 text-primary" />
                   <span className="text-xs font-medium">{med.name}</span>
                   <span className="text-xs text-muted-foreground">
-                    ({med.schedules.map((s) => `${SESSION_LABELS[s.session]} ${s.pillCount}v`).join(", ")})
+                    (
+                    {med.schedules
+                      .map(
+                        (s) => `${SESSION_LABELS[s.session]} ${s.pillCount}v`,
+                      )
+                      .join(", ")}
+                    )
                   </span>
                 </div>
               ))}
@@ -113,16 +120,25 @@ export default function VerificationPage() {
 
             {/* CTA */}
             <div className="flex flex-col gap-2">
-              <Button className="w-full" onClick={() => router.push(`/verification/${planId}/report`)}>
+              <Button
+                className="w-full"
+                onClick={() => router.push(`/verification/${planId}/report`)}
+              >
                 Phân tích khay thuốc
                 <RiArrowRightLine />
               </Button>
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => cameraInputRef.current?.click()}>
+                <Button
+                  variant="outline"
+                  onClick={() => cameraInputRef.current?.click()}
+                >
                   <RiRefreshLine />
                   Chụp lại
                 </Button>
-                <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                <Button
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   <RiImageAddLine />
                   Đổi ảnh
                 </Button>
@@ -133,7 +149,9 @@ export default function VerificationPage() {
           /* Pick state */
           <div className="flex flex-1 flex-col justify-center gap-6">
             <div className="flex flex-col gap-1 text-center">
-              <p className="font-heading text-lg font-semibold">Chụp ảnh khay thuốc</p>
+              <p className="font-heading text-lg font-semibold">
+                Chụp ảnh khay thuốc
+              </p>
               <p className="text-sm text-muted-foreground">
                 Chụp hoặc tải ảnh lên để kiểm tra với liệu trình
               </p>
@@ -151,7 +169,9 @@ export default function VerificationPage() {
                 </div>
                 <div className="flex flex-col items-center gap-0.5">
                   <span className="text-sm font-semibold">Camera</span>
-                  <span className="text-xs text-muted-foreground">Chụp trực tiếp</span>
+                  <span className="text-xs text-muted-foreground">
+                    Chụp trực tiếp
+                  </span>
                 </div>
               </button>
 
@@ -166,7 +186,9 @@ export default function VerificationPage() {
                 </div>
                 <div className="flex flex-col items-center gap-0.5">
                   <span className="text-sm font-semibold">Tải ảnh lên</span>
-                  <span className="text-xs text-muted-foreground">Từ thư viện</span>
+                  <span className="text-xs text-muted-foreground">
+                    Từ thư viện
+                  </span>
                 </div>
               </button>
             </div>
@@ -175,8 +197,21 @@ export default function VerificationPage() {
       </main>
 
       {/* Hidden inputs */}
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileChange}
+      />
     </div>
   )
 }

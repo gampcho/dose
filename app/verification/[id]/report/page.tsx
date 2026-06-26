@@ -16,56 +16,17 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { getPlan } from "@/lib/storage"
-import type { TreatmentPlan, MedicationSession } from "@/lib/types"
-
-const SESSION_LABELS: Record<MedicationSession, string> = {
-  morning: "Sáng",
-  noon: "Trưa",
-  afternoon: "Chiều",
-  evening: "Tối",
-}
-
-interface MedicationResult {
-  medicationId: string
-  name: string
-  session: MedicationSession
-  expected: number
-  detected: number
-  status: "pass" | "fail" | "warning"
-}
-
-// Tạo mock results từ medications trong plan (AI engine sẽ thay thế sau)
-function generateMockResults(plan: TreatmentPlan): MedicationResult[] {
-  const results: MedicationResult[] = []
-  for (const med of plan.medications) {
-    for (const schedule of med.schedules) {
-      // Mock: random pass/fail để demo
-      const scenarios = [
-        { detected: schedule.pillCount, status: "pass" as const },
-        { detected: schedule.pillCount + 1, status: "fail" as const },
-        { detected: schedule.pillCount - 1, status: "fail" as const },
-        { detected: schedule.pillCount, status: "warning" as const },
-      ]
-      const pick = scenarios[Math.floor(Math.random() * scenarios.length)]
-      results.push({
-        medicationId: med.id,
-        name: med.name,
-        session: schedule.session,
-        expected: schedule.pillCount,
-        detected: pick.detected,
-        status: pick.status,
-      })
-    }
-  }
-  return results
-}
+import type { TreatmentPlan, MedicationResult } from "@/lib/types"
+import { SESSION_LABELS, generateMockResults } from "@/lib/types"
 
 export default function ReportPage() {
   const params = useParams()
   const router = useRouter()
   const planId = params.id as string
 
-  const [plan] = React.useState<TreatmentPlan | null>(() => getPlan(planId) ?? null)
+  const [plan] = React.useState<TreatmentPlan | null>(
+    () => getPlan(planId) ?? null,
+  )
   const [imageUrl] = React.useState<string | null>(() =>
     typeof window !== "undefined"
       ? sessionStorage.getItem(`dose:verify:image:${planId}`)
@@ -100,7 +61,9 @@ export default function ReportPage() {
               <RiArrowLeftLine />
             </Button>
             <div>
-              <p className="font-heading text-base font-semibold leading-tight">{plan.name}</p>
+              <p className="font-heading text-base leading-tight font-semibold">
+                {plan.name}
+              </p>
               <p className="text-xs text-muted-foreground">Kết quả kiểm tra</p>
             </div>
           </div>
@@ -155,10 +118,9 @@ export default function ReportPage() {
 
         {/* Body: 2 cột trên desktop, stack trên mobile */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-
           {/* Cột trái: ảnh */}
           <div className="flex flex-col gap-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Ảnh khay thuốc
             </p>
             {imageUrl ? (
@@ -190,7 +152,7 @@ export default function ReportPage() {
 
           {/* Cột phải: kết quả từng thuốc */}
           <div className="flex flex-col gap-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Kết quả từng thuốc
             </p>
 
@@ -221,7 +183,9 @@ export default function ReportPage() {
                 <span className="text-xl font-bold text-amber-500">
                   {warnCount}
                 </span>
-                <span className="text-xs text-muted-foreground">Cần xác nhận</span>
+                <span className="text-xs text-muted-foreground">
+                  Cần xác nhận
+                </span>
               </div>
               <div className="w-px bg-border" />
               <div className="flex flex-1 flex-col items-center gap-0.5">
@@ -249,9 +213,12 @@ function ResultRow({ result }: { result: MedicationResult }) {
     <div
       className={cn(
         "flex items-start gap-3 rounded-xl border px-4 py-3 transition-colors",
-        isPass && "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/20",
-        isWarn && "border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20",
-        isFail && "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20",
+        isPass &&
+          "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/20",
+        isWarn &&
+          "border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20",
+        isFail &&
+          "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20",
       )}
     >
       {/* Icon */}
@@ -265,7 +232,7 @@ function ResultRow({ result }: { result: MedicationResult }) {
       <div className="flex flex-1 flex-col gap-1">
         <div className="flex items-center gap-2">
           <RiCapsuleLine className="size-3.5 text-muted-foreground" />
-          <p className="text-sm font-medium leading-tight">{result.name}</p>
+          <p className="text-sm leading-tight font-medium">{result.name}</p>
           <Badge variant="secondary" className="text-xs">
             {SESSION_LABELS[result.session]}
           </Badge>
@@ -273,22 +240,32 @@ function ResultRow({ result }: { result: MedicationResult }) {
 
         <div className="flex items-center gap-3 text-xs">
           <span className="text-muted-foreground">
-            Kỳ vọng: <span className="font-semibold text-foreground">{result.expected} viên</span>
+            Kỳ vọng:{" "}
+            <span className="font-semibold text-foreground">
+              {result.expected} viên
+            </span>
           </span>
           <span className="text-muted-foreground">
-            Phát hiện: <span className={cn(
-              "font-semibold",
-              isPass && "text-emerald-600",
-              isWarn && "text-amber-600",
-              isFail && "text-red-600",
-            )}>{result.detected} viên</span>
+            Phát hiện:{" "}
+            <span
+              className={cn(
+                "font-semibold",
+                isPass && "text-emerald-600",
+                isWarn && "text-amber-600",
+                isFail && "text-red-600",
+              )}
+            >
+              {result.detected} viên
+            </span>
           </span>
         </div>
 
         {/* Reason */}
         {isFail && (
           <p className="text-xs text-red-600 dark:text-red-400">
-            {diff > 0 ? `Thừa ${diff} viên — kiểm tra lại khay` : `Thiếu ${Math.abs(diff)} viên — kiểm tra lại khay`}
+            {diff > 0
+              ? `Thừa ${diff} viên — kiểm tra lại khay`
+              : `Thiếu ${Math.abs(diff)} viên — kiểm tra lại khay`}
           </p>
         )}
         {isWarn && (

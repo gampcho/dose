@@ -22,45 +22,58 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { getPlan, upsertPlan, generateId } from "@/lib/storage"
-import type { TreatmentPlan, Medication, MedicationSession, MedicationSchedule } from "@/lib/types"
+import type {
+  TreatmentPlan,
+  Medication,
+  MedicationSession,
+  MedicationSchedule,
+  ScheduleMap,
+} from "@/lib/types"
+import { SESSION_LABELS, defaultSchedules } from "@/lib/types"
 
-const SESSIONS: { key: MedicationSession; label: string; icon: React.ReactNode }[] = [
-  { key: "morning", label: "Sáng", icon: <RiSunLine className="size-4" /> },
-  { key: "noon", label: "Trưa", icon: <RiBowlLine className="size-4" /> },
-  { key: "afternoon", label: "Chiều", icon: <RiSunLine className="size-4 opacity-60" /> },
-  { key: "evening", label: "Tối", icon: <RiMoonLine className="size-4" /> },
+const SESSIONS: {
+  key: MedicationSession
+  label: string
+  icon: React.ReactNode
+}[] = [
+  {
+    key: "morning",
+    label: SESSION_LABELS["morning"],
+    icon: <RiSunLine className="size-4" />,
+  },
+  {
+    key: "noon",
+    label: SESSION_LABELS["noon"],
+    icon: <RiBowlLine className="size-4" />,
+  },
+  {
+    key: "afternoon",
+    label: SESSION_LABELS["afternoon"],
+    icon: <RiSunLine className="size-4 opacity-60" />,
+  },
+  {
+    key: "evening",
+    label: SESSION_LABELS["evening"],
+    icon: <RiMoonLine className="size-4" />,
+  },
 ]
-
-const SESSION_LABELS: Record<MedicationSession, string> = {
-  morning: "Sáng",
-  noon: "Trưa",
-  afternoon: "Chiều",
-  evening: "Tối",
-}
-
-interface ScheduleState {
-  enabled: boolean
-  pillCount: number
-}
-
-type ScheduleMap = Record<MedicationSession, ScheduleState>
-
-const defaultSchedules = (): ScheduleMap => ({
-  morning: { enabled: false, pillCount: 1 },
-  noon: { enabled: false, pillCount: 1 },
-  afternoon: { enabled: false, pillCount: 1 },
-  evening: { enabled: false, pillCount: 1 },
-})
 
 export default function TreatmentDetailPage() {
   const params = useParams()
   const router = useRouter()
   const planId = params.id as string
 
-  const [plan, setPlan] = React.useState<TreatmentPlan | null>(() => getPlan(planId) ?? null)
+  const [plan, setPlan] = React.useState<TreatmentPlan | null>(
+    () => getPlan(planId) ?? null,
+  )
   const [dialogOpen, setDialogOpen] = React.useState(false)
 
   // Add medication form state
@@ -68,7 +81,8 @@ export default function TreatmentDetailPage() {
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
   const [medName, setMedName] = React.useState("")
   const [notes, setNotes] = React.useState("")
-  const [schedules, setSchedules] = React.useState<ScheduleMap>(defaultSchedules())
+  const [schedules, setSchedules] =
+    React.useState<ScheduleMap>(defaultSchedules())
   const [rawText, setRawText] = React.useState("")
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -99,7 +113,10 @@ export default function TreatmentDetailPage() {
   function setPillCount(key: MedicationSession, delta: number) {
     setSchedules((prev) => ({
       ...prev,
-      [key]: { ...prev[key], pillCount: Math.max(1, prev[key].pillCount + delta) },
+      [key]: {
+        ...prev[key],
+        pillCount: Math.max(1, prev[key].pillCount + delta),
+      },
     }))
   }
 
@@ -117,16 +134,20 @@ export default function TreatmentDetailPage() {
     setDialogOpen(true)
   }
 
-  const enabledSchedules = Object.entries(schedules).filter(([, s]) => s.enabled)
+  const enabledSchedules = Object.entries(schedules).filter(
+    ([, s]) => s.enabled,
+  )
   const canSave = medName.trim() && enabledSchedules.length > 0
 
   function handleSaveMed() {
     if (!plan || !canSave) return
-    const schedulesOut: MedicationSchedule[] = enabledSchedules.map(([key, s]) => ({
-      session: key as MedicationSession,
-      pillCount: s.pillCount,
-      notes: notes.trim() || undefined,
-    }))
+    const schedulesOut: MedicationSchedule[] = enabledSchedules.map(
+      ([key, s]) => ({
+        session: key as MedicationSession,
+        pillCount: s.pillCount,
+        notes: notes.trim() || undefined,
+      }),
+    )
     const med: Medication = {
       id: generateId(),
       name: medName.trim(),
@@ -143,7 +164,10 @@ export default function TreatmentDetailPage() {
 
   function handleDeleteMed(medId: string) {
     if (!plan) return
-    const updated = { ...plan, medications: plan.medications.filter((m) => m.id !== medId) }
+    const updated = {
+      ...plan,
+      medications: plan.medications.filter((m) => m.id !== medId),
+    }
     upsertPlan(updated)
     setPlan(updated)
   }
@@ -156,10 +180,16 @@ export default function TreatmentDetailPage() {
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon-sm" onClick={() => router.push("/")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => router.push("/")}
+            >
               <RiArrowLeftLine />
             </Button>
-            <span className="font-heading text-base font-medium">{plan.name}</span>
+            <span className="font-heading text-base font-medium">
+              {plan.name}
+            </span>
           </div>
           {plan.medications.length > 0 && (
             <Button size="sm" onClick={handleOpenDialog}>
@@ -225,18 +255,39 @@ export default function TreatmentDetailPage() {
                   <RiImageAddLine className="size-5 text-muted-foreground" />
                 </div>
                 <div className="flex flex-col items-center gap-0.5">
-                  <span className="text-sm font-medium">Chọn ảnh đơn thuốc</span>
-                  <span className="text-xs text-muted-foreground">JPG, PNG, HEIC...</span>
+                  <span className="text-sm font-medium">
+                    Chọn ảnh đơn thuốc
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    JPG, PNG, HEIC...
+                  </span>
                 </div>
               </button>
 
-              <Button variant="outline" className="w-full" onClick={() => cameraInputRef.current?.click()}>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => cameraInputRef.current?.click()}
+              >
                 <RiCameraLine />
                 Chụp ảnh trực tiếp
               </Button>
 
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileChange}
+              />
 
               <div className="flex items-center gap-3">
                 <Separator className="flex-1" />
@@ -244,7 +295,11 @@ export default function TreatmentDetailPage() {
                 <Separator className="flex-1" />
               </div>
 
-              <Button variant="ghost" className="w-full" onClick={() => setStep("form")}>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => setStep("form")}
+              >
                 Nhập thủ công
               </Button>
             </div>
@@ -253,19 +308,35 @@ export default function TreatmentDetailPage() {
               {imagePreview && (
                 <div className="relative overflow-hidden rounded-xl border">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={imagePreview} alt="Đơn thuốc" className="max-h-40 w-full bg-muted/30 object-contain" />
-                  <Button variant="secondary" size="icon-sm" className="absolute top-2 right-2" onClick={() => { setImagePreview(null); setStep("upload") }}>
+                  <img
+                    src={imagePreview}
+                    alt="Đơn thuốc"
+                    className="max-h-40 w-full bg-muted/30 object-contain"
+                  />
+                  <Button
+                    variant="secondary"
+                    size="icon-sm"
+                    className="absolute top-2 right-2"
+                    onClick={() => {
+                      setImagePreview(null)
+                      setStep("upload")
+                    }}
+                  >
                     <RiCloseLine />
                   </Button>
                   <div className="border-t bg-muted/50 px-3 py-2">
-                    <p className="text-xs text-muted-foreground">Đang chờ OCR... (có thể nhập thủ công bên dưới)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Đang chờ OCR... (có thể nhập thủ công bên dưới)
+                    </p>
                   </div>
                 </div>
               )}
 
               {imagePreview && (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">Nội dung đọc được</label>
+                  <label className="text-sm font-medium">
+                    Nội dung đọc được
+                  </label>
                   <textarea
                     className="min-h-16 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                     placeholder="OCR sẽ điền tự động. Bạn có thể chỉnh sửa."
@@ -278,12 +349,21 @@ export default function TreatmentDetailPage() {
               <Separator />
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">Tên thuốc <span className="text-destructive">*</span></label>
-                <Input placeholder="VD: Paracetamol 500mg" value={medName} onChange={(e) => setMedName(e.target.value)} autoFocus={!imagePreview} />
+                <label className="text-sm font-medium">
+                  Tên thuốc <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  placeholder="VD: Paracetamol 500mg"
+                  value={medName}
+                  onChange={(e) => setMedName(e.target.value)}
+                  autoFocus={!imagePreview}
+                />
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium">Buổi uống <span className="text-destructive">*</span></label>
+                <label className="text-sm font-medium">
+                  Buổi uống <span className="text-destructive">*</span>
+                </label>
                 {SESSIONS.map(({ key, label, icon }) => {
                   const s = schedules[key]
                   return (
@@ -303,7 +383,11 @@ export default function TreatmentDetailPage() {
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Lưu ý</label>
-                <Input placeholder="VD: Uống sau ăn..." value={notes} onChange={(e) => setNotes(e.target.value)} />
+                <Input
+                  placeholder="VD: Uống sau ăn..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
               </div>
 
               {canSave && (
@@ -311,18 +395,36 @@ export default function TreatmentDetailPage() {
                   <CardContent className="py-3">
                     <p className="font-medium">{medName}</p>
                     <div className="mt-1.5 flex flex-wrap gap-1">
-                      {SESSIONS.filter(({ key }) => schedules[key].enabled).map(({ key, label }) => (
-                        <Badge key={key} variant="secondary">{label} · {schedules[key].pillCount} viên</Badge>
-                      ))}
+                      {SESSIONS.filter(({ key }) => schedules[key].enabled).map(
+                        ({ key, label }) => (
+                          <Badge key={key} variant="secondary">
+                            {label} · {schedules[key].pillCount} viên
+                          </Badge>
+                        ),
+                      )}
                     </div>
-                    {notes && <p className="mt-1.5 text-xs text-muted-foreground">{notes}</p>}
+                    {notes && (
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        {notes}
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               )}
 
               <div className="flex gap-2 pb-1">
-                <Button variant="outline" className="flex-1" onClick={() => setDialogOpen(false)}>Hủy</Button>
-                <Button className="flex-1" disabled={!canSave} onClick={handleSaveMed}>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setDialogOpen(false)}
+                >
+                  Hủy
+                </Button>
+                <Button
+                  className="flex-1"
+                  disabled={!canSave}
+                  onClick={handleSaveMed}
+                >
                   <RiCheckLine />
                   Lưu thuốc
                 </Button>
@@ -335,7 +437,13 @@ export default function TreatmentDetailPage() {
   )
 }
 
-function MedicationCard({ med, onDelete }: { med: Medication; onDelete: () => void }) {
+function MedicationCard({
+  med,
+  onDelete,
+}: {
+  med: Medication
+  onDelete: () => void
+}) {
   return (
     <Card>
       <CardContent className="flex items-start gap-3 py-4">
@@ -343,7 +451,7 @@ function MedicationCard({ med, onDelete }: { med: Medication; onDelete: () => vo
           <RiCapsuleLine className="size-4 text-primary" />
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <p className="font-medium leading-snug">{med.name}</p>
+          <p className="leading-snug font-medium">{med.name}</p>
           <div className="flex flex-wrap gap-1">
             {med.schedules.map((s) => (
               <Badge key={s.session} variant="secondary">
@@ -352,10 +460,17 @@ function MedicationCard({ med, onDelete }: { med: Medication; onDelete: () => vo
             ))}
           </div>
           {med.schedules[0]?.notes && (
-            <p className="text-xs text-muted-foreground">{med.schedules[0].notes}</p>
+            <p className="text-xs text-muted-foreground">
+              {med.schedules[0].notes}
+            </p>
           )}
         </div>
-        <Button variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground hover:text-destructive" onClick={onDelete}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0 text-muted-foreground hover:text-destructive"
+          onClick={onDelete}
+        >
           <RiDeleteBinLine />
         </Button>
       </CardContent>
@@ -363,7 +478,15 @@ function MedicationCard({ med, onDelete }: { med: Medication; onDelete: () => vo
   )
 }
 
-function SessionRow({ label, icon, enabled, pillCount, onToggle, onDecrease, onIncrease }: {
+function SessionRow({
+  label,
+  icon,
+  enabled,
+  pillCount,
+  onToggle,
+  onDecrease,
+  onIncrease,
+}: {
   label: string
   icon: React.ReactNode
   enabled: boolean
@@ -373,23 +496,48 @@ function SessionRow({ label, icon, enabled, pillCount, onToggle, onDecrease, onI
   onIncrease: () => void
 }) {
   return (
-    <div className={cn("flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors", enabled ? "border-primary/30 bg-primary/5" : "border-border")}>
+    <div
+      className={cn(
+        "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+        enabled ? "border-primary/30 bg-primary/5" : "border-border",
+      )}
+    >
       <button
         type="button"
         onClick={onToggle}
-        className={cn("flex size-5 shrink-0 items-center justify-center rounded border transition-colors", enabled ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background")}
+        className={cn(
+          "flex size-5 shrink-0 items-center justify-center rounded border transition-colors",
+          enabled
+            ? "border-primary bg-primary text-primary-foreground"
+            : "border-border bg-background",
+        )}
       >
         {enabled && <RiCheckLine className="size-3" />}
       </button>
       <div className="flex items-center gap-1.5 text-sm">
         {icon}
-        <span className={cn("font-medium", !enabled && "text-muted-foreground")}>{label}</span>
+        <span
+          className={cn("font-medium", !enabled && "text-muted-foreground")}
+        >
+          {label}
+        </span>
       </div>
       {enabled && (
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="icon-xs" onClick={onDecrease} disabled={pillCount <= 1}><RiSubtractLine /></Button>
-          <span className="w-5 text-center text-sm font-medium tabular-nums">{pillCount}</span>
-          <Button variant="outline" size="icon-xs" onClick={onIncrease}><RiAddLine /></Button>
+          <Button
+            variant="outline"
+            size="icon-xs"
+            onClick={onDecrease}
+            disabled={pillCount <= 1}
+          >
+            <RiSubtractLine />
+          </Button>
+          <span className="w-5 text-center text-sm font-medium tabular-nums">
+            {pillCount}
+          </span>
+          <Button variant="outline" size="icon-xs" onClick={onIncrease}>
+            <RiAddLine />
+          </Button>
           <span className="text-sm text-muted-foreground">viên</span>
         </div>
       )}

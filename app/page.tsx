@@ -16,7 +16,13 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { getPlans, upsertPlan, deletePlan, generateId } from "@/lib/storage"
 import type { TreatmentPlan } from "@/lib/types"
@@ -61,7 +67,9 @@ export default function HomePage() {
             <div className="flex size-8 items-center justify-center rounded-xl bg-primary">
               <RiMedicineBottleLine className="size-4 text-primary-foreground" />
             </div>
-            <span className="font-heading text-lg font-semibold tracking-tight">DOSE</span>
+            <span className="font-heading text-lg font-semibold tracking-tight">
+              DOSE
+            </span>
           </div>
         </div>
       </header>
@@ -157,19 +165,25 @@ function PlanCard({
       <CardContent className="flex items-center gap-4 py-4">
         {/* Index badge */}
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <span className="font-heading text-sm font-bold text-primary">{index}</span>
+          <span className="font-heading text-sm font-bold text-primary">
+            {index}
+          </span>
         </div>
 
         {/* Info */}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <p className="font-medium leading-snug">{plan.name}</p>
+          <p className="leading-snug font-medium">{plan.name}</p>
           <div className="flex items-center gap-2">
             {medCount === 0 ? (
-              <span className="text-xs text-muted-foreground">Chưa có thuốc</span>
+              <span className="text-xs text-muted-foreground">
+                Chưa có thuốc
+              </span>
             ) : (
               <>
                 <RiCapsuleLine className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{medCount} loại thuốc</span>
+                <span className="text-xs text-muted-foreground">
+                  {medCount} loại thuốc
+                </span>
                 <div className="flex gap-1 overflow-hidden">
                   {plan.medications.slice(0, 2).map((med) => (
                     <Badge key={med.id} variant="secondary" className="text-xs">
@@ -177,7 +191,9 @@ function PlanCard({
                     </Badge>
                   ))}
                   {medCount > 2 && (
-                    <Badge variant="outline" className="text-xs">+{medCount - 2}</Badge>
+                    <Badge variant="outline" className="text-xs">
+                      +{medCount - 2}
+                    </Badge>
                   )}
                 </div>
               </>
