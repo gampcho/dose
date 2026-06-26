@@ -13,7 +13,6 @@ import {
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { getPlan } from "@/lib/storage"
 import type { TreatmentPlan, MedicationSession } from "@/lib/types"
 
@@ -29,17 +28,15 @@ export default function VerificationPage() {
   const router = useRouter()
   const planId = params.id as string
 
-  const [plan, setPlan] = React.useState<TreatmentPlan | null>(null)
+  const [plan] = React.useState<TreatmentPlan | null>(() => getPlan(planId) ?? null)
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const cameraInputRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
-    const p = getPlan(planId)
-    if (!p) router.push("/")
-    else setPlan(p)
-  }, [planId, router])
+    if (!plan) router.push("/")
+  }, [plan, router])
 
   function handleFile(file: File) {
     const url = URL.createObjectURL(file)

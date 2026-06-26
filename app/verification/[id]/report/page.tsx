@@ -65,20 +65,20 @@ export default function ReportPage() {
   const router = useRouter()
   const planId = params.id as string
 
-  const [plan, setPlan] = React.useState<TreatmentPlan | null>(null)
-  const [imageUrl, setImageUrl] = React.useState<string | null>(null)
-  const [results, setResults] = React.useState<MedicationResult[]>([])
+  const [plan] = React.useState<TreatmentPlan | null>(() => getPlan(planId) ?? null)
+  const [imageUrl] = React.useState<string | null>(() =>
+    typeof window !== "undefined"
+      ? sessionStorage.getItem(`dose:verify:image:${planId}`)
+      : null,
+  )
+  const [results] = React.useState<MedicationResult[]>(() => {
+    const p = getPlan(planId)
+    return p ? generateMockResults(p) : []
+  })
 
   React.useEffect(() => {
-    const p = getPlan(planId)
-    if (!p) { router.push("/"); return }
-    setPlan(p)
-
-    const img = sessionStorage.getItem(`dose:verify:image:${planId}`)
-    setImageUrl(img)
-
-    setResults(generateMockResults(p))
-  }, [planId, router])
+    if (!plan) router.push("/")
+  }, [plan, router])
 
   if (!plan) return null
 

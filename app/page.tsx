@@ -21,29 +21,10 @@ import { Input } from "@/components/ui/input"
 import { getPlans, upsertPlan, deletePlan, generateId } from "@/lib/storage"
 import type { TreatmentPlan } from "@/lib/types"
 
-const SESSION_LABELS: Record<string, string> = {
-  morning: "Sáng",
-  noon: "Trưa",
-  afternoon: "Chiều",
-  evening: "Tối",
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  })
-}
-
 export default function HomePage() {
-  const [plans, setPlans] = React.useState<TreatmentPlan[]>([])
+  const [plans, setPlans] = React.useState<TreatmentPlan[]>(() => getPlans())
   const [open, setOpen] = React.useState(false)
   const [name, setName] = React.useState("")
-
-  React.useEffect(() => {
-    setPlans(getPlans())
-  }, [])
 
   function handleCreate() {
     if (!name.trim()) return
