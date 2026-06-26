@@ -9,12 +9,10 @@ import {
   RiImageAddLine,
   RiCloseLine,
   RiCheckLine,
-  RiSubtractLine,
   RiSunLine,
   RiBowlLine,
   RiMoonLine,
   RiCapsuleLine,
-  RiDeleteBinLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
@@ -28,7 +26,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { cn } from "@/lib/utils"
+import { MedicationCard } from "@/components/common/medication-card"
+import { SessionRow } from "@/components/common/session-row"
 import { getPlan, upsertPlan, generateId } from "@/lib/storage"
 import type {
   TreatmentPlan,
@@ -223,7 +222,7 @@ export default function TreatmentDetailPage() {
               <MedicationCard
                 key={med.id}
                 med={med}
-                onDelete={() => handleDeleteMed(med.id)}
+                onDeleteAction={() => handleDeleteMed(med.id)}
               />
             ))}
             <button
@@ -433,114 +432,6 @@ export default function TreatmentDetailPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
-  )
-}
-
-function MedicationCard({
-  med,
-  onDelete,
-}: {
-  med: Medication
-  onDelete: () => void
-}) {
-  return (
-    <Card>
-      <CardContent className="flex items-start gap-3 py-4">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-          <RiCapsuleLine className="size-4 text-primary" />
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <p className="leading-snug font-medium">{med.name}</p>
-          <div className="flex flex-wrap gap-1">
-            {med.schedules.map((s) => (
-              <Badge key={s.session} variant="secondary">
-                {SESSION_LABELS[s.session]} · {s.pillCount} viên
-              </Badge>
-            ))}
-          </div>
-          {med.schedules[0]?.notes && (
-            <p className="text-xs text-muted-foreground">
-              {med.schedules[0].notes}
-            </p>
-          )}
-        </div>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0 text-muted-foreground hover:text-destructive"
-          onClick={onDelete}
-        >
-          <RiDeleteBinLine />
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
-function SessionRow({
-  label,
-  icon,
-  enabled,
-  pillCount,
-  onToggle,
-  onDecrease,
-  onIncrease,
-}: {
-  label: string
-  icon: React.ReactNode
-  enabled: boolean
-  pillCount: number
-  onToggle: () => void
-  onDecrease: () => void
-  onIncrease: () => void
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
-        enabled ? "border-primary/30 bg-primary/5" : "border-border",
-      )}
-    >
-      <button
-        type="button"
-        onClick={onToggle}
-        className={cn(
-          "flex size-5 shrink-0 items-center justify-center rounded border transition-colors",
-          enabled
-            ? "border-primary bg-primary text-primary-foreground"
-            : "border-border bg-background",
-        )}
-      >
-        {enabled && <RiCheckLine className="size-3" />}
-      </button>
-      <div className="flex items-center gap-1.5 text-sm">
-        {icon}
-        <span
-          className={cn("font-medium", !enabled && "text-muted-foreground")}
-        >
-          {label}
-        </span>
-      </div>
-      {enabled && (
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon-xs"
-            onClick={onDecrease}
-            disabled={pillCount <= 1}
-          >
-            <RiSubtractLine />
-          </Button>
-          <span className="w-5 text-center text-sm font-medium tabular-nums">
-            {pillCount}
-          </span>
-          <Button variant="outline" size="icon-xs" onClick={onIncrease}>
-            <RiAddLine />
-          </Button>
-          <span className="text-sm text-muted-foreground">viên</span>
-        </div>
-      )}
     </div>
   )
 }
