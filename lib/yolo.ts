@@ -9,7 +9,8 @@ let session: ort.InferenceSession | null = null
 
 async function getSession() {
   if (!session) {
-    ort.env.wasm.numThreads = navigator.hardwareConcurrency ?? 4
+    ort.env.wasm.numThreads = 1
+    ort.env.wasm.wasmPaths = "/"
     session = await ort.InferenceSession.create(MODEL_URL, {
       executionProviders: ["webgpu", "wasm"],
     })
