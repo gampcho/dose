@@ -11,12 +11,11 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { getPlan } from "@/lib/storage"
 import { ResultRow } from "@/components/common/result-row"
 import { detect } from "@/lib/yolo"
-import { loadClassNames } from "@/lib/verify"
+import { loadClassNames, matchClassName, verify } from "@/lib/verify"
 import type { TreatmentPlan, MedicationResult } from "@/lib/types"
 
 export default function ReportPage() {
@@ -24,33 +23,39 @@ export default function ReportPage() {
   const router = useRouter()
   const planId = params.id as string
 
-  const [plan] = React.useState<TreatmentPlan | null>(
-    () => getPlan(planId) ?? null,
-  )
-  const [imageUrl] = React.useState<string | null>(() =>
-    typeof window !== "undefined"
-      ? sessionStorage.getItem(`dose:verify:image:${planId}`)
-      : null,
-  )
+  const [plan, setPlan] = React.useState<TreatmentPlan | null>(null)
+  const [imageUrl, setImageUrl] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [results, setResults] = React.useState<MedicationResult[]>([])
 
   React.useEffect(() => {
-    if (!plan) {
+    const p = getPlan(planId)
+    if (!p) {
       router.push("/")
       return
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPlan(p)
+    setImageUrl(sessionStorage.getItem(`dose:verify:image:${planId}`))
+  }, [planId, router])
+
+  React.useEffect(() => {
+    if (!plan || !imageUrl) {
+      if (plan) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setLoading(false)
+      }
+      return
+    }
+
+    let cancelled = false
 
     async function run() {
+      if (!plan || !imageUrl) return
+
       try {
         await loadClassNames()
-
-        if (!imageUrl) {
-          setError("Không có ảnh để phân tích")
-          setLoading(false)
-          return
-        }
 
         const img = new Image()
         img.crossOrigin = "anonymous"
@@ -62,56 +67,43 @@ export default function ReportPage() {
 
         const detections = await detect(img)
 
-        // Group detections by class
-        const classCounts = new Map<number, { count: number; conf: number }>()
-        for (const d of detections) {
-          const prev = classCounts.get(d.classId)
-          if (prev) {
-            prev.count++
-            prev.conf = Math.max(prev.conf, d.confidence)
-          } else {
-            classCounts.set(d.classId, { count: 1, conf: d.confidence })
-          }
+        const expected: Record<number, number> = {}
+        const matched: { medId: string; medName: string; classId: number }[] = []
+
+        for (const med of plan.medications) {
+          const match = matchClassName(med.name)
+          if (!match) continue
+
+          const totalPills = med.schedules.reduce((sum, s) => sum + s.pillCount, 0)
+          expected[match.classId] = (expected[match.classId] ?? 0) + totalPills
+          matched.push({ medId: med.id, medName: med.name, classId: match.classId })
         }
 
-        const planResult = getPlan(planId)
-        if (!planResult) return
+        const items = verify(expected, detections)
 
-        // Map plan medications to results (naive: 1 med = 1 expected pill class)
-        const medResults: MedicationResult[] = []
-        const classIds = Array.from(classCounts.keys())
-        let classIdx = 0
-
-        for (const med of planResult.medications) {
-          for (const schedule of med.schedules) {
-            const det = classIdx < classIds.length ? classCounts.get(classIds[classIdx]) : undefined
-            const detectedCount = det?.count ?? 0
-            medResults.push({
-              medicationId: med.id,
-              name: med.name,
-              session: schedule.session,
-              expected: schedule.pillCount,
-              detected: detectedCount,
-              status: detectedCount === schedule.pillCount ? "pass" : "fail",
-            })
-            classIdx++
+        const medResults: MedicationResult[] = items.map((item) => {
+          const match = matched.find((m) => m.classId === item.classId)
+          return {
+            ...item,
+            name: match?.medName ?? item.name,
           }
-        }
-        setResults(medResults)
+        })
+
+        if (!cancelled) setResults(medResults)
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Lỗi không xác định")
+        if (!cancelled) setError(e instanceof Error ? e.message : "Lỗi không xác định")
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     run()
-  }, [plan, planId, imageUrl, router])
+    return () => { cancelled = true }
+  }, [plan, imageUrl])
 
   if (!plan) return null
 
-  const failCount = results.filter((r) => r.status === "fail").length
-  const warnCount = results.filter((r) => r.status === "warning").length
+  const failCount = results.filter((r) => r.status === "fail" || r.status === "extra").length
   const overallPass = failCount === 0 && results.length > 0
 
   return (
@@ -192,11 +184,6 @@ export default function ReportPage() {
                     ? "Không phát hiện sai lệch — khay thuốc khớp với liệu trình"
                     : `Phát hiện ${failCount} sai lệch — cần kiểm tra lại trước khi dùng`}
                 </p>
-                {warnCount > 0 && (
-                  <p className="mt-0.5 text-xs opacity-80">
-                    {warnCount} mục cần xác nhận thêm
-                  </p>
-                )}
               </div>
             </div>
 
@@ -238,36 +225,9 @@ export default function ReportPage() {
                 </p>
 
                 <div className="flex flex-col gap-2">
-                  {results.map((r, i) => (
-                    <ResultRow key={i} result={r} />
+                  {results.map((r) => (
+                    <ResultRow key={r.classId} result={r} />
                   ))}
-                </div>
-
-                <Separator />
-
-                <div className="flex gap-4 rounded-xl bg-muted/40 px-4 py-3 text-sm">
-                  <div className="flex flex-1 flex-col items-center gap-0.5">
-                    <span className="text-xl font-bold text-emerald-500">
-                      {results.filter((r) => r.status === "pass").length}
-                    </span>
-                    <span className="text-xs text-muted-foreground">Đúng</span>
-                  </div>
-                  <div className="w-px bg-border" />
-                  <div className="flex flex-1 flex-col items-center gap-0.5">
-                    <span className="text-xl font-bold text-amber-500">
-                      {warnCount}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Cần xác nhận
-                    </span>
-                  </div>
-                  <div className="w-px bg-border" />
-                  <div className="flex flex-1 flex-col items-center gap-0.5">
-                    <span className="text-xl font-bold text-red-500">
-                      {failCount}
-                    </span>
-                    <span className="text-xs text-muted-foreground">Sai lệch</span>
-                  </div>
                 </div>
               </div>
             </div>

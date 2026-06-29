@@ -21,7 +21,12 @@ import { getPlans, upsertPlan, deletePlan, generateId } from "@/lib/storage"
 import type { TreatmentPlan } from "@/lib/types"
 
 export default function HomePage() {
-  const [plans, setPlans] = React.useState<TreatmentPlan[]>(() => getPlans())
+  const [plans, setPlans] = React.useState<TreatmentPlan[]>([])
+
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPlans(getPlans())
+  }, [])
   const [open, setOpen] = React.useState(false)
   const [name, setName] = React.useState("")
 

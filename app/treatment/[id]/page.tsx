@@ -29,6 +29,8 @@ import {
 import { MedicationCard } from "@/components/common/medication-card"
 import { SessionRow } from "@/components/common/session-row"
 import { getPlan, upsertPlan, generateId } from "@/lib/storage"
+import { ocr } from "@/lib/ocr"
+import { parsePrescription } from "@/lib/parser"
 import type {
   TreatmentPlan,
   Medication,
@@ -37,6 +39,7 @@ import type {
   ScheduleMap,
 } from "@/lib/types"
 import { SESSION_LABELS, defaultSchedules } from "@/lib/types"
+import type { TextBox } from "@/lib/ocr"
 
 const SESSIONS: {
   key: MedicationSession
@@ -83,6 +86,10 @@ export default function TreatmentDetailPage() {
   const [schedules, setSchedules] =
     React.useState<ScheduleMap>(defaultSchedules())
   const [rawText, setRawText] = React.useState("")
+  const [ocrLoading, setOcrLoading] = React.useState(false)
+  const [parsedMeds, setParsedMeds] = React.useState<
+    { drugName: string; quantity: number; dosage: string; instructions: string }[]
+  >([])
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const cameraInputRef = React.useRef<HTMLInputElement>(null)
@@ -91,10 +98,39 @@ export default function TreatmentDetailPage() {
     if (!plan) router.push("/")
   }, [plan, router])
 
-  function handleFile(file: File) {
+  async function handleFile(file: File) {
     const url = URL.createObjectURL(file)
     setImagePreview(url)
     setStep("form")
+    setOcrLoading(true)
+    setRawText("")
+
+    try {
+      const img = new Image()
+      img.src = url
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error("Cannot load image"))
+      })
+
+      const results: TextBox[] = await ocr(img)
+      const text = results.map((r) => r.text).join("\n")
+      setRawText(text || "Không nhận diện được văn bản")
+
+      const parsed = parsePrescription(results.map((r) => r.text))
+      setParsedMeds(parsed)
+
+      if (parsed.length > 0) {
+        setMedName(parsed[0].drugName)
+        if (parsed[0].instructions) {
+          setNotes(parsed[0].instructions)
+        }
+      }
+    } catch (e) {
+      setRawText("Lỗi OCR: " + (e instanceof Error ? e.message : "Không xác định"))
+    } finally {
+      setOcrLoading(false)
+    }
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -126,6 +162,7 @@ export default function TreatmentDetailPage() {
     setNotes("")
     setSchedules(defaultSchedules())
     setRawText("")
+    setParsedMeds([])
   }
 
   function handleOpenDialog() {
@@ -325,7 +362,11 @@ export default function TreatmentDetailPage() {
                   </Button>
                   <div className="border-t bg-muted/50 px-3 py-2">
                     <p className="text-xs text-muted-foreground">
-                      Đang chờ OCR... (có thể nhập thủ công bên dưới)
+                      {ocrLoading
+                        ? "Đang đọc đơn thuốc..."
+                        : rawText
+                          ? `Đã đọc ${rawText.split("\n").filter((l) => l.trim()).length} dòng`
+                          : "Chưa có kết quả OCR"}
                     </p>
                   </div>
                 </div>
@@ -337,11 +378,44 @@ export default function TreatmentDetailPage() {
                     Nội dung đọc được
                   </label>
                   <textarea
-                    className="min-h-16 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    placeholder="OCR sẽ điền tự động. Bạn có thể chỉnh sửa."
+                    className="min-h-16 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+                    placeholder={
+                      ocrLoading
+                        ? "Đang đọc..."
+                        : "OCR sẽ điền tự động. Bạn có thể chỉnh sửa."
+                    }
                     value={rawText}
                     onChange={(e) => setRawText(e.target.value)}
+                    disabled={ocrLoading}
                   />
+                </div>
+              )}
+
+              {parsedMeds.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium">
+                    Thuốc phát hiện ({parsedMeds.length})
+                  </label>
+                  <div className="flex flex-col gap-1.5">
+                    {parsedMeds.map((med, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => {
+                          setMedName(med.drugName)
+                          if (med.instructions) setNotes(med.instructions)
+                        }}
+                        className="rounded-lg border bg-muted/40 px-3 py-2 text-left text-xs transition-colors hover:border-primary/50 hover:bg-muted/60"
+                      >
+                        <p className="font-medium">{med.drugName}</p>
+                        <p className="text-muted-foreground">
+                          {med.quantity > 0 ? `${med.quantity} viên` : ""}
+                          {med.dosage ? ` · ${med.dosage}` : ""}
+                          {med.instructions ? ` · ${med.instructions}` : ""}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 

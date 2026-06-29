@@ -1,10 +1,8 @@
-import type { MedicationSession } from "./domain"
-
 export interface MedicationResult {
-  medicationId: string
+  classId: number
   name: string
-  session: MedicationSession
   expected: number
   detected: number
-  status: "pass" | "fail" | "warning"
+  confidence: number
+  status: "pass" | "fail" | "extra"
 }

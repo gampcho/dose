@@ -1,8 +1,8 @@
-import * as ort from "onnxruntime-web"
+import * as ort from "onnxruntime-web/wasm"
 
 const MODEL_URL = "/models/vaipe12n.onnx"
 const INPUT_SIZE = 640
-const CONF_THRESHOLD = 0.45
+const CONF_THRESHOLD = 0.25
 const IOU_THRESHOLD = 0.5
 
 let session: ort.InferenceSession | null = null
@@ -12,7 +12,7 @@ async function getSession() {
     ort.env.wasm.numThreads = 1
     ort.env.wasm.wasmPaths = "/"
     session = await ort.InferenceSession.create(MODEL_URL, {
-      executionProviders: ["webgpu", "wasm"],
+      executionProviders: ["wasm"],
     })
   }
   return session
@@ -65,7 +65,7 @@ function nms(boxes: number[][], scores: number[], iouThresh: number): number[] {
     if (suppressed.has(i)) continue
     keep.push(i)
     for (const j of order) {
-      if (j <= i || suppressed.has(j)) continue
+      if (j === i || suppressed.has(j)) continue
       if (iou(boxes[i], boxes[j]) > iouThresh) suppressed.add(j)
     }
   }
