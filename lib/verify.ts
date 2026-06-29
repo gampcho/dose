@@ -7,7 +7,7 @@ export async function loadClassNames(): Promise<Record<string, string>> {
     const res = await fetch("/models/class_names.json")
     classNames = await res.json()
   }
-  return classNames
+  return classNames!
 }
 
 export function getClassName(classId: number): string {

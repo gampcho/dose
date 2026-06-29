@@ -16,9 +16,8 @@ import { cn } from "@/lib/utils"
 import { getPlan } from "@/lib/storage"
 import { ResultRow } from "@/components/common/result-row"
 import { detect } from "@/lib/yolo"
-import { loadClassNames, getClassName } from "@/lib/verify"
+import { loadClassNames } from "@/lib/verify"
 import type { TreatmentPlan, MedicationResult } from "@/lib/types"
-import type { Detection } from "@/lib/yolo"
 
 export default function ReportPage() {
   const params = useParams()
