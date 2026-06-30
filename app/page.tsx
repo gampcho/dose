@@ -22,10 +22,18 @@ import type { TreatmentPlan } from "@/lib/types"
 
 export default function HomePage() {
   const [plans, setPlans] = React.useState<TreatmentPlan[]>([])
+  const [today, setToday] = React.useState("")
 
   React.useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPlans(getPlans())
+    setToday(
+      new Date().toLocaleDateString("vi-VN", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      }),
+    )
   }, [])
   const [open, setOpen] = React.useState(false)
   const [name, setName] = React.useState("")
@@ -49,12 +57,6 @@ export default function HomePage() {
     deletePlan(id)
     setPlans(getPlans())
   }
-
-  const today = new Date().toLocaleDateString("vi-VN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  })
 
   return (
     <div className="min-h-svh bg-background">
