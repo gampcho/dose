@@ -1,40 +1,77 @@
 [
   {
-    "id": "missing",
-    "name": "Missing Pill",
-    "description": "Prescription requires 3 drugs, tray has only 2. Missing renapril.",
-    "prescription": "prescription_0.png",
-    "pilltray": "pilltray_1.png",
-    "expected": "fail",
-    "expected_medications": [
-      {"class_id": 64, "name": "hoạt huyết dưỡng não", "expected": 2, "in_tray": true},
-      {"class_id": 10, "name": "novoxim-500", "expected": 1, "in_tray": true},
-      {"class_id": 47, "name": "renapril", "expected": 1, "in_tray": false}
-    ]
-  },
-  {
-    "id": "wrong",
-    "name": "Wrong Pills",
-    "description": "Prescription has diabetes drugs, tray has completely different pills.",
+    "id": "diabetes",
+    "name": "Đái tháo đường —多buổi",
+    "description": "GLUCOFAST 850 (Sáng 1 + Chiều 1) + DIAMICRON (Sáng 1) + ENALAPRIL (Sáng 1). Tổng 4 viên/ngày, 3 loại (1 unknown).",
     "prescription": "prescription_1.png",
     "pilltray": "pilltray_2.png",
     "expected": "fail",
+    "ocr_text": "1) GLUCOFAST 850 850mg SL: 60 Viên Ghi chú Uống sau khi ăn: Chiều 1 Viên Sáng 1 Viên 2) DIAMICRON MR TAB 30MG 60'S 30mg SL: 30 Viên Ghi chú Uống trước khi ăn: Sáng 1 Viên 3) ENALAPRIL 5mg SL: 30 Viên Ghi chú Uống trước khi ăn: Sáng 1 Viên",
     "expected_medications": [
-      {"class_id": 37, "name": "golddicron", "expected": 1, "in_tray": false},
-      {"class_id": 46, "name": "enalapril", "expected": 1, "in_tray": false},
-      {"class_id": 55, "name": "glucofast 850", "expected": 1, "in_tray": false}
+      {"class_id": 55, "name": "glucofast 850", "expected": 2, "sessions": ["morning", "afternoon"], "in_tray": false},
+      {"class_id": 46, "name": "enalapril", "expected": 1, "sessions": ["morning"], "in_tray": false}
+    ],
+    "unknown_medications": [
+      {"name": "diamicron mr tab", "expected": 1, "sessions": ["morning"], "total": 1}
     ]
   },
   {
-    "id": "extra",
-    "name": "Extra Pill",
-    "description": "Tray has activity blood brain supplement not in prescription.",
+    "id": "respiratory",
+    "name": "Viêm phế quản —多buổi",
+    "description": "FABAMOX 500 (Tối 2 + Sáng 2) + METRONIDAZOL (Tối 2 + Sáng 2) + CHORLATCYN (Chiều 1 + Tối 1 + Sáng 1). Tổng 11 viên/ngày, 3 loại.",
+    "prescription": "prescription_0.png",
+    "pilltray": "pilltray_1.png",
+    "expected": "pass",
+    "ocr_text": "1) FABAMOX 500MG 500mg SL: 20 viên Tối 2 viên Sáng 2 viên 2) METRONIDAZOL 250 250mg SL: 20 Viên Tối 2 Viên Sáng 2 Viên 3) CHORLATCYN 125mg+50mg+50mg+25mg Chiều 1 Viên Tối 1 Viên Sáng 1 Viên",
+    "expected_medications": [
+      {"class_id": 49, "name": "fabamox", "expected": 4, "sessions": ["morning", "evening"], "in_tray": true},
+      {"class_id": 51, "name": "metronidazol", "expected": 4, "sessions": ["morning", "evening"], "in_tray": true},
+      {"class_id": 97, "name": "chorlatcyn", "expected": 3, "sessions": ["afternoon", "evening", "morning"], "in_tray": true}
+    ],
+    "unknown_medications": []
+  },
+  {
+    "id": "hypertension_stroke",
+    "name": "Tăng huyết áp — Sáng/Tối",
+    "description": "RENAPRIL (Sáng 1) + NOVOXIM-500 (không rõ) + HOẠT HUYẾT DƯỠNG NÃO (Sáng 2 + Tối 2). Tổng 6 viên/ngày.",
+    "prescription": "prescription_0.png",
+    "pilltray": "pilltray_1.png",
+    "expected": "fail",
+    "ocr_text": "1) RENAPRIL 5MG 5mg SL: 28 Viên Ghi chú Uống: Sáng 1 Viên 2) NOVOXIM-500 0,5g SL: 20 Viên Ghi chú Uống: 3) HOẠT HUYẾT DƯỠNG NÃO 150mg+20mg SL: 20 Viên Ghi chú Uống: Tối 2 Viên Sáng 2 Viên",
+    "expected_medications": [
+      {"class_id": 47, "name": "renapril", "expected": 1, "sessions": ["morning"], "in_tray": false},
+      {"class_id": 10, "name": "novoxim-500", "expected": 1, "sessions": ["none"], "in_tray": true},
+      {"class_id": 64, "name": "hoạt huyết dưỡng não", "expected": 4, "sessions": ["morning", "evening"], "in_tray": true}
+    ],
+    "unknown_medications": []
+  },
+  {
+    "id": "hypertension_lipid",
+    "name": "Tăng huyết áp — Sáng/Chiều/Tối",
+    "description": "EBITAC 12.5 (Sáng 1 + Chiều 1) + ATORIS 20 (Tối 1/2). Tổng 2.5 viên/ngày, 2 loại.",
+    "prescription": "prescription_2.png",
+    "pilltray": "pilltray_3.png",
+    "expected": "pass",
+    "ocr_text": "1) Enalapril thydrochlorothiazide (Ebitac 12.5) 10mg + 12,5mg Uống: Sáng 1 Viên Chiều 1 Viên SL: 60 Viên 2) Atorvastatin (Atoris 20mg) 20mg Uống: Tối 1/2 Viên SL: 15 Viên",
+    "expected_medications": [
+      {"class_id": 45, "name": "ebitac", "expected": 2, "sessions": ["morning", "afternoon"], "in_tray": true},
+      {"class_id": 13, "name": "atoris", "expected": 1, "sessions": ["evening"], "in_tray": true}
+    ],
+    "unknown_medications": []
+  },
+  {
+    "id": "allergy_infection",
+    "name": "Viêm da — Sáng/Tối",
+    "description": "AMOXICILIN (Tối 2 + Sáng 2) + CLORPHENIRAMIN (Tối 1 + Sáng 1) + MENISON (Sáng 1). Tổng 7 viên/ngày, 3 loại.",
     "prescription": "prescription_3.png",
     "pilltray": "pilltray_0.png",
-    "expected": "fail",
+    "expected": "pass",
+    "ocr_text": "1) AMOXICILIN 500MG 500mg SL: 20 viên Tối 2 viên Sáng 2 viên 2) CLORPHENIRAMIN 4mg SL: 10 Viên Tối 1 Viên Sáng 1 Viên 3) MENISON 4mg SL: 5 Viên Sáng 1 Viên",
     "expected_medications": [
-      {"class_id": 91, "name": "panactol", "expected": 1, "in_tray": false},
-      {"class_id": 43, "name": "cefadroxil", "expected": 1, "in_tray": false}
-    ]
+      {"class_id": 9, "name": "amoxicilin", "expected": 4, "sessions": ["morning", "evening"], "in_tray": true},
+      {"class_id": 29, "name": "clorpheniramin", "expected": 2, "sessions": ["morning", "evening"], "in_tray": true},
+      {"class_id": 74, "name": "menison", "expected": 1, "sessions": ["morning"], "in_tray": true}
+    ],
+    "unknown_medications": []
   }
 ]
