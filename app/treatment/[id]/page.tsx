@@ -140,6 +140,7 @@ export default function TreatmentDetailPage() {
       setParsedMeds(parsed)
       setSelectedIndices(new Set(parsed.map((_m, i) => i)))
     } catch (e) {
+      console.error("[OCR] Error:", e)
       setRawText(
         "Lỗi OCR: " + (e instanceof Error ? e.message : "Không xác định"),
       )

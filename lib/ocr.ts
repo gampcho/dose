@@ -27,8 +27,9 @@ async function getPaddleService() {
     ort.env.wasm.numThreads = 1
     ort.env.wasm.wasmPaths = "/"
 
-    const [detBytes, dictRes] = await Promise.all([
+    const [detBytes, recBytes, dictRes] = await Promise.all([
       fetch("/models/det.onnx").then((r) => r.arrayBuffer()),
+      fetch("/models/rec.onnx").then((r) => r.arrayBuffer()),
       fetch("/models/dict.txt").then((r) => r.text()),
     ])
 
@@ -37,7 +38,7 @@ async function getPaddleService() {
     paddleService = await PaddleOcrService.createInstance({
       ort,
       detection: { modelBuffer: detBytes },
-      recognition: { charactersDictionary: dict },
+      recognition: { modelBuffer: recBytes, charactersDictionary: dict },
     })
   }
   return paddleService
