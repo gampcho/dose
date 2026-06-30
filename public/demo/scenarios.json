@@ -1,0 +1,40 @@
+[
+  {
+    "id": "missing",
+    "name": "Missing Pill",
+    "description": "Prescription requires 3 drugs, tray has only 2. Missing renapril.",
+    "prescription": "prescription_0.png",
+    "pilltray": "pilltray_1.png",
+    "expected": "fail",
+    "expected_medications": [
+      {"class_id": 64, "name": "hoạt huyết dưỡng não", "expected": 2, "in_tray": true},
+      {"class_id": 10, "name": "novoxim-500", "expected": 1, "in_tray": true},
+      {"class_id": 47, "name": "renapril", "expected": 1, "in_tray": false}
+    ]
+  },
+  {
+    "id": "wrong",
+    "name": "Wrong Pills",
+    "description": "Prescription has diabetes drugs, tray has completely different pills.",
+    "prescription": "prescription_1.png",
+    "pilltray": "pilltray_2.png",
+    "expected": "fail",
+    "expected_medications": [
+      {"class_id": 37, "name": "golddicron", "expected": 1, "in_tray": false},
+      {"class_id": 46, "name": "enalapril", "expected": 1, "in_tray": false},
+      {"class_id": 55, "name": "glucofast 850", "expected": 1, "in_tray": false}
+    ]
+  },
+  {
+    "id": "extra",
+    "name": "Extra Pill",
+    "description": "Tray has activity blood brain supplement not in prescription.",
+    "prescription": "prescription_3.png",
+    "pilltray": "pilltray_0.png",
+    "expected": "fail",
+    "expected_medications": [
+      {"class_id": 91, "name": "panactol", "expected": 1, "in_tray": false},
+      {"class_id": 43, "name": "cefadroxil", "expected": 1, "in_tray": false}
+    ]
+  }
+]

@@ -10,29 +10,43 @@ import {
   RiCloseLine,
   RiRefreshLine,
   RiArrowRightLine,
+  RiFileListLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
 import { getPlan } from "@/lib/storage"
+import { ocr } from "@/lib/ocr"
+import { parsePrescription } from "@/lib/parser"
 import type { TreatmentPlan } from "@/lib/types"
 import { SESSION_LABELS } from "@/lib/types"
+import type { TextBox } from "@/lib/ocr"
 
 export default function VerificationPage() {
   const params = useParams()
   const router = useRouter()
   const planId = params.id as string
 
-  const [plan] = React.useState<TreatmentPlan | null>(
-    () => getPlan(planId) ?? null,
-  )
+  const [plan, setPlan] = React.useState<TreatmentPlan | null>(null)
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
+  const [ocrText, setOcrText] = React.useState<string>("")
+  const [ocrLoading, setOcrLoading] = React.useState(false)
+  const [parsedMeds, setParsedMeds] = React.useState<
+    { drugName: string; quantity: number; dosage: string; instructions: string; matchedName: string | null }[]
+  >([])
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const cameraInputRef = React.useRef<HTMLInputElement>(null)
+  const prescriptionInputRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
-    if (!plan) router.push("/")
-  }, [plan, router])
+    const p = getPlan(planId)
+    if (!p) {
+      router.push("/")
+      return
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPlan(p)
+  }, [planId, router])
 
   function handleFile(file: File) {
     const url = URL.createObjectURL(file)
@@ -44,6 +58,36 @@ export default function VerificationPage() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) handleFile(file)
+    e.target.value = ""
+  }
+
+  async function handlePrescription(file: File) {
+    setOcrLoading(true)
+    try {
+      const url = URL.createObjectURL(file)
+      const img = new Image()
+      img.src = url
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error("Cannot load image"))
+      })
+
+      const results: TextBox[] = await ocr(img)
+      const text = results.map((r) => r.text).join("\n")
+      setOcrText(text || "Không nhận diện được văn bản")
+
+      const parsed = parsePrescription(results.map((r) => r.text))
+      setParsedMeds(parsed)
+    } catch (e) {
+      setOcrText("Lỗi: " + (e instanceof Error ? e.message : "Không xác định"))
+    } finally {
+      setOcrLoading(false)
+    }
+  }
+
+  function handlePrescriptionChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) handlePrescription(file)
     e.target.value = ""
   }
 
@@ -99,6 +143,68 @@ export default function VerificationPage() {
             </div>
           </div>
         )}
+
+        {/* Prescription OCR */}
+        <div className="flex flex-col gap-2">
+          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Đơn thuốc
+          </p>
+          {ocrLoading ? (
+            <div className="flex items-center gap-3 rounded-xl border bg-muted/40 px-4 py-3">
+              <div className="size-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              <p className="text-sm text-muted-foreground">
+                Đang đọc đơn thuốc...
+              </p>
+            </div>
+          ) : ocrText ? (
+            <div className="rounded-xl border bg-muted/40 px-4 py-3">
+              <p className="text-sm whitespace-pre-wrap">{ocrText}</p>
+              {parsedMeds.length > 0 && (
+                <div className="mt-3 flex flex-col gap-1.5 border-t pt-3">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Thuốc phát hiện: {parsedMeds.length}
+                  </p>
+                  {parsedMeds.map((med, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between rounded-lg bg-background px-2.5 py-1.5 text-xs"
+                    >
+                      <div>
+                        <span className="font-medium">{med.drugName}</span>
+                        {med.matchedName && (
+                          <span className="ml-1 text-muted-foreground">
+                            → {med.matchedName}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-muted-foreground">
+                        {med.quantity > 0 ? `${med.quantity} viên` : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2"
+                onClick={() => prescriptionInputRef.current?.click()}
+              >
+                <RiRefreshLine className="size-3.5" />
+                Quét lại
+              </Button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => prescriptionInputRef.current?.click()}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
+            >
+              <RiFileListLine className="size-4" />
+              Quét đơn thuốc (OCR)
+            </button>
+          )}
+        </div>
 
         {imagePreview ? (
           /* Preview state */
@@ -211,6 +317,13 @@ export default function VerificationPage() {
         capture="environment"
         className="hidden"
         onChange={handleFileChange}
+      />
+      <input
+        ref={prescriptionInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handlePrescriptionChange}
       />
     </div>
   )
