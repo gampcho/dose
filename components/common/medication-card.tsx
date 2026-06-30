@@ -1,19 +1,27 @@
 "use client"
 
-import { RiCapsuleLine, RiDeleteBinLine } from "@remixicon/react"
+import { RiCapsuleLine, RiDeleteBinLine, RiPencilLine } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { SESSION_LABELS } from "@/lib/types"
-import type { Medication } from "@/lib/types"
+import type { Medication, MedicationSession } from "@/lib/types"
+
+const SESSION_LABELS: Record<MedicationSession, string> = {
+  morning: "Sáng",
+  noon: "Trưa",
+  afternoon: "Chiều",
+  evening: "Tối",
+}
 
 export function MedicationCard({
   med,
   onDeleteAction,
+  onEditAction,
 }: {
   med: Medication
   onDeleteAction: () => void
+  onEditAction?: () => void
 }) {
   return (
     <Card>
@@ -29,21 +37,37 @@ export function MedicationCard({
                 {SESSION_LABELS[s.session]} · {s.pillCount} viên
               </Badge>
             ))}
+            {med.mealTiming === "before" && (
+              <Badge variant="outline">Trước ăn</Badge>
+            )}
+            {med.mealTiming === "after" && (
+              <Badge variant="outline">Sau ăn</Badge>
+            )}
           </div>
-          {med.schedules[0]?.notes && (
-            <p className="text-xs text-muted-foreground">
-              {med.schedules[0].notes}
-            </p>
+          {med.notes && (
+            <p className="text-xs text-muted-foreground">{med.notes}</p>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0 text-muted-foreground hover:text-destructive"
-          onClick={onDeleteAction}
-        >
-          <RiDeleteBinLine />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          {onEditAction && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={onEditAction}
+            >
+              <RiPencilLine />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={onDeleteAction}
+          >
+            <RiDeleteBinLine />
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )

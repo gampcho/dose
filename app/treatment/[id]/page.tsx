@@ -12,14 +12,12 @@ import {
   RiSunLine,
   RiBowlLine,
   RiMoonLine,
-  RiCapsuleLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -29,14 +27,19 @@ import {
 import { MedicationCard } from "@/components/common/medication-card"
 import { SessionRow } from "@/components/common/session-row"
 import { getPlan, upsertPlan, generateId } from "@/lib/storage"
+import { ocr } from "@/lib/ocr"
+import { parsePrescription, parseWithLLM } from "@/lib/parser"
+import type { ParsedMedication } from "@/lib/parser"
 import type {
   TreatmentPlan,
   Medication,
   MedicationSession,
   MedicationSchedule,
   ScheduleMap,
+  MealTiming,
 } from "@/lib/types"
 import { SESSION_LABELS, defaultSchedules } from "@/lib/types"
+import type { TextBox } from "@/lib/ocr"
 
 const SESSIONS: {
   key: MedicationSession
@@ -65,6 +68,13 @@ const SESSIONS: {
   },
 ]
 
+type DraftMed = {
+  name: string
+  schedules: ScheduleMap
+  mealTiming: MealTiming
+  notes: string
+}
+
 export default function TreatmentDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -73,33 +83,126 @@ export default function TreatmentDetailPage() {
   const [plan, setPlan] = React.useState<TreatmentPlan | null>(
     () => getPlan(planId) ?? null,
   )
-  const [dialogOpen, setDialogOpen] = React.useState(false)
-
-  // Add medication form state
-  const [step, setStep] = React.useState<"upload" | "form">("upload")
-  const [imagePreview, setImagePreview] = React.useState<string | null>(null)
-  const [medName, setMedName] = React.useState("")
-  const [notes, setNotes] = React.useState("")
-  const [schedules, setSchedules] =
-    React.useState<ScheduleMap>(defaultSchedules())
-  const [rawText, setRawText] = React.useState("")
-
-  const fileInputRef = React.useRef<HTMLInputElement>(null)
-  const cameraInputRef = React.useRef<HTMLInputElement>(null)
+  const [dialogOpen, setDialogOpen] = React.useState(
+    () => (getPlan(planId)?.medications.length ?? 0) === 0,
+  )
 
   React.useEffect(() => {
     if (!plan) router.push("/")
   }, [plan, router])
 
-  function handleFile(file: File) {
+  const [step, setStep] = React.useState<"upload" | "ocr-select" | "form">(
+    "upload",
+  )
+  const [imagePreview, setImagePreview] = React.useState<string | null>(null)
+  const [rawText, setRawText] = React.useState("")
+  const [ocrLoading, setOcrLoading] = React.useState(false)
+  const [parsedMeds, setParsedMeds] = React.useState<ParsedMedication[]>([])
+  const [selectedIndices, setSelectedIndices] = React.useState<Set<number>>(
+    new Set(),
+  )
+
+  const [medName, setMedName] = React.useState("")
+  const [notes, setNotes] = React.useState("")
+  const [schedules, setSchedules] =
+    React.useState<ScheduleMap>(defaultSchedules())
+  const [mealTiming, setMealTiming] = React.useState<MealTiming>(null)
+
+  const [editMed, setEditMed] = React.useState<Medication | null>(null)
+  const [editDraft, setEditDraft] = React.useState<DraftMed | null>(null)
+
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const cameraInputRef = React.useRef<HTMLInputElement>(null)
+
+  async function handleFile(file: File) {
     const url = URL.createObjectURL(file)
     setImagePreview(url)
-    setStep("form")
+    setOcrLoading(true)
+    setRawText("")
+    setStep("ocr-select")
+
+    try {
+      const img = new Image()
+      img.src = url
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error("Cannot load image"))
+      })
+
+      const results: TextBox[] = await ocr(img)
+      const text = results.map((r) => r.text).join("\n")
+      setRawText(text || "Không nhận diện được văn bản")
+
+      let parsed = parsePrescription(results.map((r) => r.text))
+      if (parsed.length === 0 && text.length > 10) {
+        parsed = await parseWithLLM(text)
+      }
+      setParsedMeds(parsed)
+      setSelectedIndices(new Set(parsed.map((_m, i) => i)))
+    } catch (e) {
+      setRawText(
+        "Lỗi OCR: " + (e instanceof Error ? e.message : "Không xác định"),
+      )
+      setParsedMeds([])
+    } finally {
+      setOcrLoading(false)
+    }
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) handleFile(file)
+    e.target.value = ""
+  }
+
+  function toggleSelected(i: number) {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev)
+      if (next.has(i)) next.delete(i)
+      else next.add(i)
+      return next
+    })
+  }
+
+  function resetForm() {
+    setStep("upload")
+    setImagePreview(null)
+    setMedName("")
+    setNotes("")
+    setSchedules(defaultSchedules())
+    setMealTiming(null)
+    setRawText("")
+    setParsedMeds([])
+    setSelectedIndices(new Set())
+  }
+
+  function handleOpenDialog() {
+    resetForm()
+    setDialogOpen(true)
+  }
+
+  function saveMeds(meds: Medication[]) {
+    if (!plan) return
+    const updated = { ...plan, medications: [...plan.medications, ...meds] }
+    upsertPlan(updated)
+    setPlan(updated)
+  }
+
+  function handleSaveSelected() {
+    const meds: Medication[] = Array.from(selectedIndices)
+      .sort((a, b) => a - b)
+      .map((i) => ({
+        id: generateId(),
+        name: parsedMeds[i].drugName,
+        schedules: [],
+        mealTiming: null,
+        notes: "",
+        instructions: rawText.trim(),
+        createdAt: new Date().toISOString(),
+      }))
+    saveMeds(meds)
+    setDialogOpen(false)
+    resetForm()
   }
 
   function toggleSession(key: MedicationSession) {
@@ -119,20 +222,6 @@ export default function TreatmentDetailPage() {
     }))
   }
 
-  function resetForm() {
-    setStep("upload")
-    setImagePreview(null)
-    setMedName("")
-    setNotes("")
-    setSchedules(defaultSchedules())
-    setRawText("")
-  }
-
-  function handleOpenDialog() {
-    resetForm()
-    setDialogOpen(true)
-  }
-
   const enabledSchedules = Object.entries(schedules).filter(
     ([, s]) => s.enabled,
   )
@@ -144,19 +233,18 @@ export default function TreatmentDetailPage() {
       ([key, s]) => ({
         session: key as MedicationSession,
         pillCount: s.pillCount,
-        notes: notes.trim() || undefined,
       }),
     )
     const med: Medication = {
       id: generateId(),
       name: medName.trim(),
       schedules: schedulesOut,
+      mealTiming,
+      notes: notes.trim(),
       instructions: rawText.trim(),
       createdAt: new Date().toISOString(),
     }
-    const updated = { ...plan, medications: [...plan.medications, med] }
-    upsertPlan(updated)
-    setPlan(updated)
+    saveMeds([med])
     setDialogOpen(false)
     resetForm()
   }
@@ -171,11 +259,36 @@ export default function TreatmentDetailPage() {
     setPlan(updated)
   }
 
+  function openEdit(med: Medication) {
+    const sm = defaultSchedules()
+    for (const s of med.schedules) sm[s.session] = { enabled: true, pillCount: s.pillCount }
+    setEditDraft({ name: med.name, schedules: sm, mealTiming: med.mealTiming, notes: med.notes })
+    setEditMed(med)
+  }
+
+  function handleSaveEdit() {
+    if (!plan || !editMed || !editDraft) return
+    const schedulesOut: MedicationSchedule[] = Object.entries(editDraft.schedules)
+      .filter(([, s]) => s.enabled)
+      .map(([key, s]) => ({ session: key as MedicationSession, pillCount: s.pillCount }))
+    const updated = {
+      ...plan,
+      medications: plan.medications.map((m) =>
+        m.id !== editMed.id
+          ? m
+          : { ...m, name: editDraft.name, schedules: schedulesOut, mealTiming: editDraft.mealTiming, notes: editDraft.notes },
+      ),
+    }
+    upsertPlan(updated)
+    setPlan(updated)
+    setEditMed(null)
+    setEditDraft(null)
+  }
+
   if (!plan) return null
 
   return (
     <div className="min-h-svh bg-background">
-      {/* Header */}
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
@@ -200,50 +313,32 @@ export default function TreatmentDetailPage() {
       </header>
 
       <main className="mx-auto max-w-lg px-4 py-6">
-        {plan.medications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed py-16 text-center">
-            <div className="flex size-12 items-center justify-center rounded-2xl bg-muted">
-              <RiCapsuleLine className="size-6 text-muted-foreground" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <p className="font-medium">Chưa có thuốc nào</p>
-              <p className="text-sm text-muted-foreground">
-                Thêm thuốc vào liệu trình này để bắt đầu theo dõi.
-              </p>
-            </div>
-            <Button onClick={handleOpenDialog}>
-              <RiAddLine />
-              Thêm thuốc
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {plan.medications.map((med) => (
-              <MedicationCard
-                key={med.id}
-                med={med}
-                onDeleteAction={() => handleDeleteMed(med.id)}
-              />
-            ))}
-            <button
-              onClick={handleOpenDialog}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
-            >
-              <RiAddLine className="size-4" />
-              Thêm thuốc
-            </button>
-          </div>
-        )}
+        <div className="flex flex-col gap-3">
+          {plan.medications.map((med) => (
+            <MedicationCard
+              key={med.id}
+              med={med}
+              onEditAction={() => openEdit(med)}
+              onDeleteAction={() => handleDeleteMed(med.id)}
+            />
+          ))}
+          <button
+            onClick={handleOpenDialog}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
+          >
+            <RiAddLine className="size-4" />
+            Thêm thuốc
+          </button>
+        </div>
       </main>
 
-      {/* Dialog thêm thuốc */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Thêm thuốc mới</DialogTitle>
           </DialogHeader>
 
-          {step === "upload" ? (
+          {step === "upload" && (
             <div className="flex flex-col gap-4">
               <button
                 type="button"
@@ -254,12 +349,8 @@ export default function TreatmentDetailPage() {
                   <RiImageAddLine className="size-5 text-muted-foreground" />
                 </div>
                 <div className="flex flex-col items-center gap-0.5">
-                  <span className="text-sm font-medium">
-                    Chọn ảnh đơn thuốc
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    JPG, PNG, HEIC...
-                  </span>
+                  <span className="text-sm font-medium">Chọn ảnh đơn thuốc</span>
+                  <span className="text-xs text-muted-foreground">JPG, PNG, HEIC...</span>
                 </div>
               </button>
 
@@ -302,7 +393,9 @@ export default function TreatmentDetailPage() {
                 Nhập thủ công
               </Button>
             </div>
-          ) : (
+          )}
+
+          {step === "ocr-select" && (
             <div className="flex flex-col gap-4">
               {imagePreview && (
                 <div className="relative overflow-hidden rounded-xl border">
@@ -325,28 +418,133 @@ export default function TreatmentDetailPage() {
                   </Button>
                   <div className="border-t bg-muted/50 px-3 py-2">
                     <p className="text-xs text-muted-foreground">
-                      Đang chờ OCR... (có thể nhập thủ công bên dưới)
+                      {ocrLoading
+                        ? "Đang đọc đơn thuốc..."
+                        : rawText
+                          ? `Đã đọc ${rawText.split("\n").filter((l) => l.trim()).length} dòng`
+                          : "Chưa có kết quả"}
                     </p>
                   </div>
                 </div>
               )}
 
-              {imagePreview && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">
-                    Nội dung đọc được
-                  </label>
-                  <textarea
-                    className="min-h-16 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    placeholder="OCR sẽ điền tự động. Bạn có thể chỉnh sửa."
-                    value={rawText}
-                    onChange={(e) => setRawText(e.target.value)}
-                  />
-                </div>
+              {ocrLoading && (
+                <p className="text-center text-sm text-muted-foreground">
+                  Đang nhận diện thuốc...
+                </p>
               )}
 
-              <Separator />
+              {!ocrLoading && parsedMeds.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">
+                      Thuốc phát hiện ({parsedMeds.length})
+                    </span>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                      onClick={() =>
+                        setSelectedIndices(
+                          selectedIndices.size === parsedMeds.length
+                            ? new Set()
+                            : new Set(parsedMeds.map((_, i) => i)),
+                        )
+                      }
+                    >
+                      {selectedIndices.size === parsedMeds.length
+                        ? "Bỏ chọn tất cả"
+                        : "Chọn tất cả"}
+                    </button>
+                  </div>
 
+                  <div className="flex flex-col gap-2">
+                    {parsedMeds.map((med, i) => (
+                      <div
+                        key={i}
+                        className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
+                          selectedIndices.has(i)
+                            ? "border-primary/50 bg-primary/5"
+                            : "border-border bg-muted/40"
+                        }`}
+                      >
+                        <Checkbox
+                          checked={selectedIndices.has(i)}
+                          onCheckedChange={() => toggleSelected(i)}
+                          className="mt-2.5"
+                        />
+                        <div className="flex flex-1 flex-col gap-1 text-sm">
+                          <Input
+                            value={med.drugName}
+                            onChange={(e) =>
+                              setParsedMeds((prev) =>
+                                prev.map((m, j) =>
+                                  j === i ? { ...m, drugName: e.target.value } : m,
+                                ),
+                              )
+                            }
+                            className="h-8 border-0 bg-transparent px-0 font-medium shadow-none focus-visible:ring-0"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            {med.quantity > 0 ? `${med.quantity} viên` : ""}
+                            {med.dosage ? ` · ${med.dosage}` : ""}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="mt-1.5 text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            setParsedMeds((prev) => prev.filter((_, j) => j !== i))
+                            setSelectedIndices((prev) => {
+                              const next = new Set<number>()
+                              for (const idx of prev) {
+                                if (idx < i) next.add(idx)
+                                else if (idx > i) next.add(idx - 1)
+                              }
+                              return next
+                            })
+                          }}
+                        >
+                          <RiCloseLine className="size-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2 pb-1">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setDialogOpen(false)}
+                    >
+                      Hủy
+                    </Button>
+                    <Button
+                      className="flex-1"
+                      disabled={selectedIndices.size === 0}
+                      onClick={handleSaveSelected}
+                    >
+                      <RiCheckLine />
+                      Xác nhận {selectedIndices.size > 1 ? `${selectedIndices.size} thuốc` : "thuốc"}
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {!ocrLoading && parsedMeds.length === 0 && rawText && (
+                <div className="flex flex-col gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    Không nhận diện được thuốc, hãy nhập thủ công.
+                  </p>
+                  <Button variant="outline" onClick={() => setStep("form")}>
+                    Nhập thủ công
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === "form" && (
+            <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">
                   Tên thuốc <span className="text-destructive">*</span>
@@ -355,7 +553,7 @@ export default function TreatmentDetailPage() {
                   placeholder="VD: Paracetamol 500mg"
                   value={medName}
                   onChange={(e) => setMedName(e.target.value)}
-                  autoFocus={!imagePreview}
+                  autoFocus
                 />
               </div>
 
@@ -380,36 +578,21 @@ export default function TreatmentDetailPage() {
                 })}
               </div>
 
+              <MealTimingPicker value={mealTiming} onChange={setMealTiming} />
+
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">Lưu ý</label>
+                <label className="text-sm font-medium">
+                  Lưu ý{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (tùy chọn)
+                  </span>
+                </label>
                 <Input
                   placeholder="VD: Uống sau ăn..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                 />
               </div>
-
-              {canSave && (
-                <Card>
-                  <CardContent className="py-3">
-                    <p className="font-medium">{medName}</p>
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {SESSIONS.filter(({ key }) => schedules[key].enabled).map(
-                        ({ key, label }) => (
-                          <Badge key={key} variant="secondary">
-                            {label} · {schedules[key].pillCount} viên
-                          </Badge>
-                        ),
-                      )}
-                    </div>
-                    {notes && (
-                      <p className="mt-1.5 text-xs text-muted-foreground">
-                        {notes}
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
 
               <div className="flex gap-2 pb-1">
                 <Button
@@ -432,6 +615,179 @@ export default function TreatmentDetailPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={!!editMed}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditMed(null)
+            setEditDraft(null)
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Chỉnh sửa thuốc</DialogTitle>
+          </DialogHeader>
+          {editDraft && (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium">Tên thuốc</label>
+                <Input
+                  value={editDraft.name}
+                  onChange={(e) =>
+                    setEditDraft((d) => d && { ...d, name: e.target.value })
+                  }
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium">Buổi uống</label>
+                {SESSIONS.map(({ key, label, icon }) => {
+                  const s = editDraft.schedules[key]
+                  return (
+                    <SessionRow
+                      key={key}
+                      label={label}
+                      icon={icon}
+                      enabled={s.enabled}
+                      pillCount={s.pillCount}
+                      onToggle={() =>
+                        setEditDraft(
+                          (d) =>
+                            d && {
+                              ...d,
+                              schedules: {
+                                ...d.schedules,
+                                [key]: {
+                                  ...d.schedules[key],
+                                  enabled: !d.schedules[key].enabled,
+                                },
+                              },
+                            },
+                        )
+                      }
+                      onDecrease={() =>
+                        setEditDraft(
+                          (d) =>
+                            d && {
+                              ...d,
+                              schedules: {
+                                ...d.schedules,
+                                [key]: {
+                                  ...d.schedules[key],
+                                  pillCount: Math.max(
+                                    1,
+                                    d.schedules[key].pillCount - 1,
+                                  ),
+                                },
+                              },
+                            },
+                        )
+                      }
+                      onIncrease={() =>
+                        setEditDraft(
+                          (d) =>
+                            d && {
+                              ...d,
+                              schedules: {
+                                ...d.schedules,
+                                [key]: {
+                                  ...d.schedules[key],
+                                  pillCount: d.schedules[key].pillCount + 1,
+                                },
+                              },
+                            },
+                        )
+                      }
+                    />
+                  )
+                })}
+              </div>
+
+              <MealTimingPicker
+                value={editDraft.mealTiming}
+                onChange={(v) =>
+                  setEditDraft((d) => d && { ...d, mealTiming: v })
+                }
+              />
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium">
+                  Lưu ý{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (tùy chọn)
+                  </span>
+                </label>
+                <Input
+                  placeholder="VD: Uống sau ăn..."
+                  value={editDraft.notes}
+                  onChange={(e) =>
+                    setEditDraft(
+                      (d) => d && { ...d, notes: e.target.value },
+                    )
+                  }
+                />
+              </div>
+
+              <div className="flex gap-2 pb-1">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setEditMed(null)
+                    setEditDraft(null)
+                  }}
+                >
+                  Hủy
+                </Button>
+                <Button
+                  className="flex-1"
+                  disabled={!editDraft.name.trim()}
+                  onClick={handleSaveEdit}
+                >
+                  <RiCheckLine />
+                  Lưu thay đổi
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function MealTimingPicker({
+  value,
+  onChange,
+}: {
+  value: MealTiming
+  onChange: (v: MealTiming) => void
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="text-sm font-medium">
+        Thời điểm uống{" "}
+        <span className="font-normal text-muted-foreground">(tùy chọn)</span>
+      </label>
+      <div className="flex gap-2">
+        {(["before", "after"] as const).map((val) => (
+          <button
+            key={val}
+            type="button"
+            onClick={() => onChange(value === val ? null : val)}
+            className={`flex-1 rounded-lg border py-2 text-sm transition-colors ${
+              value === val
+                ? "border-primary bg-primary/10 font-medium text-primary"
+                : "border-border bg-background text-muted-foreground hover:bg-muted/40"
+            }`}
+          >
+            {val === "before" ? "Trước ăn" : "Sau ăn"}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

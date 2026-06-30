@@ -6,10 +6,14 @@ export interface MedicationSchedule {
   notes?: string
 }
 
+export type MealTiming = "before" | "after" | null
+
 export interface Medication {
   id: string
   name: string
   schedules: MedicationSchedule[]
+  mealTiming: MealTiming
+  notes: string
   instructions: string
   createdAt: string
 }
