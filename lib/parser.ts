@@ -5,6 +5,8 @@ export interface ParsedMedication {
   quantity: number
   dosage: string
   instructions: string
+  session: "none" | "morning" | "noon" | "afternoon" | "evening"
+  condition: "none" | "before_eat" | "after_eat"
   classId: number | null
   matchedName: string | null
 }
@@ -20,7 +22,6 @@ const SESSION_KEYWORDS: Record<string, string> = {
 }
 
 export function parsePrescription(lines: string[]): ParsedMedication[] {
-  console.log("[Parser] Input lines:", lines)
   const medications: ParsedMedication[] = []
   let current: ParsedMedication | null = null
 
@@ -43,6 +44,18 @@ export function parsePrescription(lines: string[]): ParsedMedication[] {
 
     if (/ghichú|lời dặn|cộng khoản/i.test(line)) {
       current.instructions = extractInstructions(line)
+    }
+
+    for (const [kw, session] of Object.entries(SESSION_KEYWORDS)) {
+      if (line.toLowerCase().includes(kw)) {
+        current.session = session as ParsedMedication["session"]
+      }
+    }
+
+    if (/trước\s*ăn|trc\s*ăn/i.test(line)) {
+      current.condition = "before_eat"
+    } else if (/sau\s*(?:khi\s*)?ăn|sau\s*ăn/i.test(line)) {
+      current.condition = "after_eat"
     }
 
     const qty = QUANTITY_PATTERN.exec(line)
@@ -87,17 +100,25 @@ export async function parseWithLLM(
 
     if (!res.ok) return []
 
-    const { drugs } = await res.json()
-    if (!Array.isArray(drugs)) return []
+    const data = await res.json()
+    const meds: {
+      name: string
+      quantity: number
+      session?: string
+      condition?: string
+    }[] = data.prescription ?? data.drugs ?? []
+    if (!Array.isArray(meds)) return []
 
-    return drugs.map(
-      (d: { name: string; quantity: number; dosage: string; instructions: string }) => {
+    return meds.map(
+      (d) => {
         const match = matchDrug(d.name)
         return {
           drugName: d.name,
           quantity: d.quantity ?? 0,
-          dosage: d.dosage ?? "",
-          instructions: d.instructions ?? "",
+          dosage: "",
+          instructions: "",
+          session: (d.session as ParsedMedication["session"]) ?? "none",
+          condition: (d.condition as ParsedMedication["condition"]) ?? "none",
           classId: match?.classIds[0] ?? null,
           matchedName: match?.drug ?? null,
         }
@@ -148,6 +169,8 @@ function extractDrugFromLine(line: string): ParsedMedication {
     quantity,
     dosage,
     instructions: "",
+    session: "none",
+    condition: "none",
     classId: null,
     matchedName: null,
   }

@@ -140,7 +140,6 @@ export default function TreatmentDetailPage() {
       setParsedMeds(parsed)
       setSelectedIndices(new Set(parsed.map((_m, i) => i)))
     } catch (e) {
-      console.error("[OCR] Error:", e)
       setRawText(
         "Lỗi OCR: " + (e instanceof Error ? e.message : "Không xác định"),
       )
@@ -192,15 +191,22 @@ export default function TreatmentDetailPage() {
   function handleSaveSelected() {
     const meds: Medication[] = Array.from(selectedIndices)
       .sort((a, b) => a - b)
-      .map((i) => ({
-        id: generateId(),
-        name: parsedMeds[i].drugName,
-        schedules: [],
-        mealTiming: null,
-        notes: "",
-        instructions: rawText.trim(),
-        createdAt: new Date().toISOString(),
-      }))
+      .map((i) => {
+        const p = parsedMeds[i]
+        const schedules: MedicationSchedule[] = []
+        if (p.session !== "none") {
+          schedules.push({ session: p.session as MedicationSession, pillCount: p.quantity || 1 })
+        }
+        return {
+          id: generateId(),
+          name: p.drugName,
+          schedules,
+          mealTiming: p.condition === "before_eat" ? "before" as const : p.condition === "after_eat" ? "after" as const : null,
+          notes: p.matchedName || "",
+          instructions: p.instructions || rawText.trim(),
+          createdAt: new Date().toISOString(),
+        }
+      })
     saveMeds(meds)
     setDialogOpen(false)
     resetForm()
