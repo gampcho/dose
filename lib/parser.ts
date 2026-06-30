@@ -20,6 +20,7 @@ const SESSION_KEYWORDS: Record<string, string> = {
 }
 
 export function parsePrescription(lines: string[]): ParsedMedication[] {
+  console.log("[Parser] Input lines:", lines)
   const medications: ParsedMedication[] = []
   let current: ParsedMedication | null = null
 

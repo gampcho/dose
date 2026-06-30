@@ -77,6 +77,8 @@ async function ocrPaddleDetect(
     data: new Uint8Array(imageData.data),
   })
 
+  console.log("[OCR] PaddleOCR raw results:", JSON.stringify(results, null, 2))
+
   return results.map((r) => ({
     x: Math.round(r.box.x),
     y: Math.round(r.box.y),
@@ -112,6 +114,8 @@ export async function ocr(
       })
     }
   }
+
+  console.log("[OCR] Tesseract results:", results.map((r) => ({ text: r.text, conf: r.confidence, bbox: r.bbox })))
 
   return results
 }
