@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { getPlan } from "@/lib/storage"
 import { ocr } from "@/lib/ocr"
 import { parsePrescription, parseWithLLM } from "@/lib/parser"
+import type { ParsedMedication } from "@/lib/parser"
 import type { TreatmentPlan } from "@/lib/types"
 import { SESSION_LABELS } from "@/lib/types"
 import type { TextBox } from "@/lib/ocr"
@@ -30,15 +31,7 @@ export default function VerificationPage() {
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
   const [ocrText, setOcrText] = React.useState<string>("")
   const [ocrLoading, setOcrLoading] = React.useState(false)
-  const [parsedMeds, setParsedMeds] = React.useState<
-    {
-      drugName: string
-      quantity: number
-      dosage: string
-      instructions: string
-      matchedName: string | null
-    }[]
-  >([])
+  const [parsedMeds, setParsedMeds] = React.useState<ParsedMedication[]>([])
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const cameraInputRef = React.useRef<HTMLInputElement>(null)
