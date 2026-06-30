@@ -86,11 +86,13 @@ export async function parseWithLLM(
 
     if (!res.ok) return []
 
-    const { drugs } = await res.json()
-    if (!Array.isArray(drugs)) return []
+    const data = await res.json()
+    const meds: { name: string; quantity: number; session?: string; condition?: string; dosage?: string; instructions?: string }[] =
+      data.prescription ?? data.drugs ?? []
+    if (!Array.isArray(meds)) return []
 
-    return drugs.map(
-      (d: { name: string; quantity: number; dosage: string; instructions: string }) => {
+    return meds.map(
+      (d) => {
         const match = matchDrug(d.name)
         return {
           drugName: d.name,
