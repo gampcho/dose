@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils"
 import { getPlan } from "@/lib/storage"
 import { ResultRow } from "@/components/common/result-row"
 import { detect } from "@/lib/yolo"
-import { loadClassNames, matchDrug, verify } from "@/lib/verify"
+import { loadClassNames, matchDrug, verify, getDrugName } from "@/lib/verify"
 import type { TreatmentPlan, MedicationResult } from "@/lib/types"
 
 export default function ReportPage() {
@@ -58,6 +58,21 @@ export default function ReportPage() {
       try {
         await loadClassNames()
 
+        const now = new Date()
+        const hour = now.getHours()
+        let session = "none"
+        if (hour >= 5 && hour < 11) session = "morning"
+        else if (hour >= 11 && hour < 14) session = "noon"
+        else if (hour >= 14 && hour < 18) session = "afternoon"
+        else session = "evening"
+
+        console.log("[Verify] Current time:", now.toLocaleTimeString("vi-VN"), "| Hour:", hour, "| Session:", session)
+        console.log("[Verify] Plan medications:", plan.medications.map((m) => ({
+          name: m.name,
+          schedules: m.schedules,
+          mealTiming: m.mealTiming,
+        })))
+
         const img = new Image()
         img.crossOrigin = "anonymous"
         img.src = imageUrl
@@ -67,13 +82,21 @@ export default function ReportPage() {
         })
 
         const detections = await detect(img)
+        console.log("[Verify] YOLO detections:", detections.map((d) => ({
+          classId: d.classId,
+          name: getDrugName(d.classId),
+          confidence: d.confidence,
+        })))
 
         const expected: Record<number, number> = {}
         const matched: { medId: string; medName: string; classId: number }[] = []
 
         for (const med of plan.medications) {
           const match = matchDrug(med.name)
-          if (!match) continue
+          if (!match) {
+            console.log("[Verify] No drug match for:", med.name)
+            continue
+          }
 
           const totalPills = med.schedules.reduce(
             (sum, s) => sum + s.pillCount,
@@ -85,7 +108,11 @@ export default function ReportPage() {
           }
         }
 
+        console.log("[Verify] Expected (classId → count):", expected)
+        console.log("[Verify] Matched drugs:", matched)
+
         const items = verify(expected, detections)
+        console.log("[Verify] Verify results:", items)
 
         const medResults: MedicationResult[] = items.map((item) => {
           const match = matched.find((m) => m.classId === item.classId)
