@@ -28,7 +28,7 @@ import { MedicationCard } from "@/components/common/medication-card"
 import { SessionRow } from "@/components/common/session-row"
 import { getPlan, upsertPlan, generateId } from "@/lib/storage"
 import { ocr } from "@/lib/ocr"
-import { parsePrescription, parseWithLLM } from "@/lib/parser"
+import { parsePrescription, parseWithLLM, parseInstructions } from "@/lib/parser"
 import type { ParsedMedication } from "@/lib/parser"
 import type {
   TreatmentPlan,
@@ -193,10 +193,16 @@ export default function TreatmentDetailPage() {
       .sort((a, b) => a - b)
       .map((i) => {
         const p = parsedMeds[i]
-        const schedules: MedicationSchedule[] = []
-        if (p.session !== "none") {
-          schedules.push({ session: p.session as MedicationSession, pillCount: p.quantity || 1 })
-        }
+        const parsed = parseInstructions(p.instructions)
+        const schedules: MedicationSchedule[] =
+          parsed.length > 0
+            ? parsed.map((s) => ({
+                session: s.session as MedicationSession,
+                pillCount: s.pillCount,
+              }))
+            : p.session !== "none"
+              ? [{ session: p.session as MedicationSession, pillCount: 1 }]
+              : []
         return {
           id: generateId(),
           name: p.drugName,
