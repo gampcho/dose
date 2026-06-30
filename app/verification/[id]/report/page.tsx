@@ -16,8 +16,8 @@ import { cn } from "@/lib/utils"
 import { getPlan } from "@/lib/storage"
 import { ResultRow } from "@/components/common/result-row"
 import { detect } from "@/lib/yolo"
-import { loadClassNames, matchDrug, verify, getDrugName } from "@/lib/verify"
-import type { TreatmentPlan, MedicationResult } from "@/lib/types"
+import { loadClassNames, matchDrug, verify } from "@/lib/verify"
+import type { TreatmentPlan, Medication, MedicationResult } from "@/lib/types"
 
 export default function ReportPage() {
   const params = useParams()
@@ -29,7 +29,8 @@ export default function ReportPage() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [results, setResults] = React.useState<MedicationResult[]>([])
-
+  const [unknownMeds, setUnknownMeds] = React.useState<Medication[]>([])
+  const [unknownDetected, setUnknownDetected] = React.useState(0)
   React.useEffect(() => {
     const p = getPlan(planId)
     if (!p) {
@@ -58,21 +59,6 @@ export default function ReportPage() {
       try {
         await loadClassNames()
 
-        const now = new Date()
-        const hour = now.getHours()
-        let session = "none"
-        if (hour >= 5 && hour < 11) session = "morning"
-        else if (hour >= 11 && hour < 14) session = "noon"
-        else if (hour >= 14 && hour < 18) session = "afternoon"
-        else session = "evening"
-
-        console.log("[Verify] Current time:", now.toLocaleTimeString("vi-VN"), "| Hour:", hour, "| Session:", session)
-        console.log("[Verify] Plan medications:", plan.medications.map((m) => ({
-          name: m.name,
-          schedules: m.schedules,
-          mealTiming: m.mealTiming,
-        })))
-
         const img = new Image()
         img.crossOrigin = "anonymous"
         img.src = imageUrl
@@ -82,21 +68,20 @@ export default function ReportPage() {
         })
 
         const detections = await detect(img)
-        console.log("[Verify] YOLO detections:", detections.map((d) => ({
-          classId: d.classId,
-          name: getDrugName(d.classId),
-          confidence: d.confidence,
-        })))
+
+        const unknown = plan.medications.filter((m) => !m.known)
+        const knownMeds = plan.medications.filter((m) => m.known)
+        const unknownClassIds = new Set(unknown.flatMap((m) => {
+          const match = matchDrug(m.name)
+          return match?.classIds ?? []
+        }))
 
         const expected: Record<number, number> = {}
         const matched: { medId: string; medName: string; classId: number }[] = []
 
-        for (const med of plan.medications) {
+        for (const med of knownMeds) {
           const match = matchDrug(med.name)
-          if (!match) {
-            console.log("[Verify] No drug match for:", med.name)
-            continue
-          }
+          if (!match) continue
 
           const totalPills = med.schedules.reduce(
             (sum, s) => sum + s.pillCount,
@@ -108,11 +93,11 @@ export default function ReportPage() {
           }
         }
 
-        console.log("[Verify] Expected (classId → count):", expected)
-        console.log("[Verify] Matched drugs:", matched)
+        const unknownDetectedCount = detections.filter(
+          (d) => unknownClassIds.has(d.classId),
+        ).length
 
         const items = verify(expected, detections)
-        console.log("[Verify] Verify results:", items)
 
         const medResults: MedicationResult[] = items.map((item) => {
           const match = matched.find((m) => m.classId === item.classId)
@@ -122,7 +107,11 @@ export default function ReportPage() {
           }
         })
 
-        if (!cancelled) setResults(medResults)
+        if (!cancelled) {
+          setResults(medResults)
+          setUnknownMeds(unknown)
+          setUnknownDetected(unknownDetectedCount)
+        }
       } catch (e) {
         if (!cancelled)
           setError(e instanceof Error ? e.message : "Lỗi không xác định")
@@ -164,7 +153,7 @@ export default function ReportPage() {
             </div>
           </div>
 
-          {!loading && results.length > 0 && (
+          {!loading && (results.length > 0 || unknownMeds.length > 0) && (
             <Badge
               variant={overallPass ? "default" : "destructive"}
               className={cn(
@@ -201,7 +190,7 @@ export default function ReportPage() {
           </div>
         )}
 
-        {!loading && !error && results.length > 0 && (
+        {!loading && !error && (results.length > 0 || unknownMeds.length > 0) && (
           <>
             <div
               className={cn(
@@ -218,9 +207,11 @@ export default function ReportPage() {
               )}
               <div>
                 <p className="text-sm font-semibold">
-                  {overallPass
-                    ? "Không phát hiện sai lệch — khay thuốc khớp với liệu trình"
-                    : `Phát hiện ${failCount + extraCount} sai lệch — cần kiểm tra lại trước khi dùng`}
+                  {unknownMeds.length > 0 && failCount === 0
+                    ? `${passCount} thuốc đã xác minh, ${unknownMeds.length} thuốc chưa có trong model`
+                    : overallPass
+                      ? "Không phát hiện sai lệch — khay thuốc khớp với liệu trình"
+                      : `Phát hiện ${failCount + extraCount} sai lệch — cần kiểm tra lại trước khi dùng`}
                 </p>
               </div>
             </div>
@@ -267,6 +258,32 @@ export default function ReportPage() {
                     <ResultRow key={r.classId} result={r} />
                   ))}
                 </div>
+
+                {unknownMeds.length > 0 && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/40">
+                    <div className="flex items-center gap-2">
+                      <RiCloseCircleFill className="size-4 shrink-0 text-red-500" />
+                      <p className="text-sm font-semibold text-red-800 dark:text-red-300">
+                        Thuốc chưa có trong model ({unknownMeds.length})
+                      </p>
+                    </div>
+                    <div className="mt-2 flex flex-col gap-1">
+                      {unknownMeds.map((med) => {
+                        const total = med.schedules.reduce((s, sch) => s + sch.pillCount, 0)
+                        return (
+                          <p key={med.id} className="text-xs text-red-700 dark:text-red-400">
+                            {med.name} — Ký vọng: {total} viên
+                          </p>
+                        )
+                      })}
+                    </div>
+                    <p className="mt-2 text-xs text-red-600 dark:text-red-500">
+                      {unknownDetected > 0
+                        ? `Phát hiện ${unknownDetected} viên — vui lòng kiểm tra thủ công`
+                        : "Không phát hiện viên thuốc tương ứng — vui lòng kiểm tra thủ công"}
+                    </p>
+                  </div>
+                )}
 
                 <Separator />
 

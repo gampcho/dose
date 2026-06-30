@@ -11,6 +11,7 @@ export const ConditionEnum = z.enum(["none", "before_eat", "after_eat"])
 
 export const Medicine = z.object({
   name: z.string().min(1, "Medicine name is required"),
+  known: z.boolean().default(false),
   quantity: z.number().positive(),
   session: SessionEnum,
   condition: ConditionEnum,

@@ -11,6 +11,7 @@ export type MealTiming = "before" | "after" | null
 export interface Medication {
   id: string
   name: string
+  known: boolean
   schedules: MedicationSchedule[]
   mealTiming: MealTiming
   notes: string

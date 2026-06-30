@@ -7,6 +7,7 @@ export interface ParsedMedication {
   instructions: string
   session: "none" | "morning" | "noon" | "afternoon" | "evening"
   condition: "none" | "before_eat" | "after_eat"
+  known: boolean
   classId: number | null
   matchedName: string | null
 }
@@ -76,11 +77,13 @@ export function parsePrescription(lines: string[]): ParsedMedication[] {
     if (match) {
       med.classId = match.classIds[0]
       med.matchedName = match.drug
+      med.known = true
     } else {
       const fallback = matchClassName(med.drugName)
       if (fallback) {
         med.classId = fallback.classId
         med.matchedName = fallback.name
+        med.known = true
       }
     }
   }
@@ -103,6 +106,7 @@ export async function parseWithLLM(
     const data = await res.json()
     const meds: {
       name: string
+      known?: boolean
       quantity: number
       session?: string
       condition?: string
@@ -111,7 +115,8 @@ export async function parseWithLLM(
 
     return meds.map(
       (d) => {
-        const match = matchDrug(d.name)
+        const isKnown = d.known === true
+        const match = isKnown ? matchDrug(d.name) : null
         return {
           drugName: d.name,
           quantity: d.quantity ?? 0,
@@ -119,6 +124,7 @@ export async function parseWithLLM(
           instructions: "",
           session: (d.session as ParsedMedication["session"]) ?? "none",
           condition: (d.condition as ParsedMedication["condition"]) ?? "none",
+          known: isKnown,
           classId: match?.classIds[0] ?? null,
           matchedName: match?.drug ?? null,
         }
@@ -171,6 +177,7 @@ function extractDrugFromLine(line: string): ParsedMedication {
     instructions: "",
     session: "none",
     condition: "none",
+    known: false,
     classId: null,
     matchedName: null,
   }

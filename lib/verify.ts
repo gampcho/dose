@@ -97,7 +97,7 @@ export function matchClassName(medName: string): { classId: number; name: string
     }
   }
 
-  if (bestId === -1 || bestScore < 0.4) return null
+  if (bestId === -1 || bestScore < 0.85) return null
   return { classId: bestId, name: getClassName(bestId) }
 }
 
@@ -116,7 +116,7 @@ export function matchDrug(medName: string): { drug: string; classIds: number[] }
     }
   }
 
-  if (!bestDrug || bestScore < 0.4) return null
+  if (!bestDrug || bestScore < 0.85) return null
   return { drug: bestDrug, classIds: drugGroups![bestDrug] }
 }
 

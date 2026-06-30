@@ -206,6 +206,7 @@ export default function TreatmentDetailPage() {
         return {
           id: generateId(),
           name: p.drugName,
+          known: p.known,
           schedules,
           mealTiming: p.condition === "before_eat" ? "before" as const : p.condition === "after_eat" ? "after" as const : null,
           notes: p.matchedName || "",
@@ -251,6 +252,7 @@ export default function TreatmentDetailPage() {
     const med: Medication = {
       id: generateId(),
       name: medName.trim(),
+      known: true,
       schedules: schedulesOut,
       mealTiming,
       notes: notes.trim(),

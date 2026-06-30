@@ -161,7 +161,7 @@ export function matchPills({
   for (const [cid, det] of detCounts) {
     if (!matchedDetClassIds.has(cid)) {
       results.push({
-        medicine: { name: getClassName(cid), quantity: 0, session: "none", condition: "none" },
+        medicine: { name: getClassName(cid), known: false, quantity: 0, session: "none", condition: "none" },
         classId: cid,
         detectedCount: det.count,
         expectedCount: 0,
