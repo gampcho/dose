@@ -6,13 +6,6 @@ export interface TextBox {
   confidence: number
 }
 
-type OcrEngine = "tesseract" | "paddleocr" | "hybrid"
-let activeEngine: OcrEngine = "hybrid"
-
-export function setOcrEngine(engine: OcrEngine) {
-  activeEngine = engine
-}
-
 let tessWorkerPromise: Promise<Tesseract.Worker> | null = null
 
 function getTessWorker(): Promise<Tesseract.Worker> {
@@ -34,9 +27,8 @@ async function getPaddleService() {
     ort.env.wasm.numThreads = 1
     ort.env.wasm.wasmPaths = "/"
 
-    const [detBytes, recBytes, dictRes] = await Promise.all([
+    const [detBytes, dictRes] = await Promise.all([
       fetch("/models/det.onnx").then((r) => r.arrayBuffer()),
-      fetch("/models/rec.onnx").then((r) => r.arrayBuffer()),
       fetch("/models/dict.txt").then((r) => r.text()),
     ])
 
@@ -45,7 +37,7 @@ async function getPaddleService() {
     paddleService = await PaddleOcrService.createInstance({
       ort,
       detection: { modelBuffer: detBytes },
-      recognition: { modelBuffer: recBytes, charactersDictionary: dict },
+      recognition: { charactersDictionary: dict },
     })
   }
   return paddleService
@@ -64,9 +56,9 @@ function imageToCanvas(
   return canvas
 }
 
-async function ocrPaddle(
+async function ocrPaddleDetect(
   img: HTMLImageElement | HTMLCanvasElement,
-): Promise<TextBox[]> {
+): Promise<{ x: number; y: number; w: number; h: number }[]> {
   const service = await getPaddleService()
   const canvas = imageToCanvas(img)
   const w = canvas.width
@@ -85,68 +77,36 @@ async function ocrPaddle(
     data: new Uint8Array(imageData.data),
   })
 
-  return results
-    .filter((r) => r.text.trim().length > 0)
-    .map((r) => ({
-      bbox: {
-        x: Math.round(r.box.x),
-        y: Math.round(r.box.y),
-        w: Math.round(r.box.width),
-        h: Math.round(r.box.height),
-      },
-      text: r.text,
-      confidence: r.confidence,
-    }))
-}
-
-async function ocrTesseract(
-  img: HTMLImageElement | HTMLCanvasElement,
-): Promise<TextBox[]> {
-  const worker = await getTessWorker()
-  const canvas = imageToCanvas(img)
-
-  const result = await worker.recognize(canvas)
-  const lines = result.data.text.split("\n").filter((l) => l.trim().length > 0)
-
-  return lines.map((text, i) => ({
-    bbox: { x: 0, y: i * 24, w: canvas.width, h: 24 },
-    text: text.trim(),
-    confidence: result.data.confidence / 100,
+  return results.map((r) => ({
+    x: Math.round(r.box.x),
+    y: Math.round(r.box.y),
+    w: Math.round(r.box.width),
+    h: Math.round(r.box.height),
   }))
 }
 
-async function ocrHybrid(
+export async function ocr(
   img: HTMLImageElement | HTMLCanvasElement,
 ): Promise<TextBox[]> {
-  const paddleBoxes = await ocrPaddle(img)
-  if (paddleBoxes.length === 0) return []
+  const boxes = await ocrPaddleDetect(img)
+  if (boxes.length === 0) return []
 
   const canvas = imageToCanvas(img)
   const worker = await getTessWorker()
 
   const results: TextBox[] = []
-  for (const box of paddleBoxes) {
+  for (const box of boxes) {
     const cropCanvas = document.createElement("canvas")
-    cropCanvas.width = box.bbox.w
-    cropCanvas.height = box.bbox.h
+    cropCanvas.width = box.w
+    cropCanvas.height = box.h
     const ctx = cropCanvas.getContext("2d")!
-    ctx.drawImage(
-      canvas,
-      box.bbox.x,
-      box.bbox.y,
-      box.bbox.w,
-      box.bbox.h,
-      0,
-      0,
-      box.bbox.w,
-      box.bbox.h,
-    )
+    ctx.drawImage(canvas, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h)
 
     const { data } = await worker.recognize(cropCanvas)
     const text = data.text.trim()
     if (text.length > 0) {
       results.push({
-        bbox: box.bbox,
+        bbox: box,
         text,
         confidence: data.confidence / 100,
       })
@@ -154,17 +114,4 @@ async function ocrHybrid(
   }
 
   return results
-}
-
-export async function ocr(
-  img: HTMLImageElement | HTMLCanvasElement,
-): Promise<TextBox[]> {
-  switch (activeEngine) {
-    case "paddleocr":
-      return ocrPaddle(img)
-    case "tesseract":
-      return ocrTesseract(img)
-    case "hybrid":
-      return ocrHybrid(img)
-  }
 }
