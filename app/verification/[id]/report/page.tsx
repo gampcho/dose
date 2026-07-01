@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils"
 import { getPlan } from "@/lib/storage"
 import { verifyImageKey } from "@/lib/storage"
 import { ResultRow } from "@/components/common/result-row"
+import { BBoxOverlay } from "@/components/common/bbox-overlay"
 import { detect } from "@/lib/yolo"
 import type { Detection } from "@/lib/yolo"
 import { loadCatalog, findDrug, comparePills } from "@/lib/catalog"
@@ -72,7 +73,33 @@ function analyzeDetections(plan: Plan, detections: Detection[], session: Session
 
   const results = comparePills(expected, detections)
 
-  return { results, unknownMeds: unknown, identityMeds: identity, unknownDetected }
+  const classToDrug = new Map<number, number[]>()
+  for (const med of plan.medications) {
+    const match = findDrug(med.name)
+    if (match && match.classIds.length > 1) {
+      for (const cid of match.classIds) {
+        classToDrug.set(cid, match.classIds)
+      }
+    }
+  }
+
+  const merged = new Map<number, Result>()
+  for (const r of results) {
+    const siblings = classToDrug.get(r.classId)
+    if (siblings) {
+      const existing = siblings.find((id) => merged.has(id) && merged.get(id)!.status !== "missing")
+      if (existing) {
+        const prev = merged.get(existing)!
+        prev.detected += r.detected
+        prev.confidence = Math.max(prev.confidence, r.confidence)
+        if (prev.status === "missing") prev.status = r.status
+        continue
+      }
+    }
+    merged.set(r.classId, r)
+  }
+
+  return { results: Array.from(merged.values()), unknownMeds: unknown, identityMeds: identity, unknownDetected }
 }
 
 export default function ReportPage() {
@@ -85,6 +112,7 @@ export default function ReportPage() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [results, setResults] = React.useState<Result[]>([])
+  const [detections, setDetections] = React.useState<Detection[]>([])
   const [unknownMeds, setUnknownMeds] = React.useState<Medication[]>([])
   const [identityMeds, setIdentityMeds] = React.useState<
     { med: Medication; present: boolean; name: string }[]
@@ -133,6 +161,7 @@ export default function ReportPage() {
         const analysis = analyzeDetections(plan, detections, session, mt)
 
         if (!cancelled) {
+          setDetections(detections)
           setResults(analysis.results)
           setUnknownMeds(analysis.unknownMeds)
           setUnknownDetected(analysis.unknownDetected)
@@ -237,13 +266,12 @@ export default function ReportPage() {
                   Ảnh khay thuốc
                 </p>
                 {imageUrl ? (
-                  <div className="overflow-hidden rounded-2xl border shadow-sm">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                  <div className="relative overflow-hidden rounded-2xl border shadow-sm">
+                    <BBoxOverlay
                       src={imageUrl}
-                      alt="Khay thuốc"
-                      className="w-full bg-muted/30 object-contain"
-                      style={{ maxHeight: 380 }}
+                      detections={detections}
+                      results={results}
+                      className="relative"
                     />
                   </div>
                 ) : (

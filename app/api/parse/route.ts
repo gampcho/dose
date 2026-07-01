@@ -4,30 +4,21 @@ import type { MedicineType } from "@/types"
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-const SYSTEM_PROMPT = `You are a Vietnamese prescription parser. Given raw OCR text from a medical prescription, extract all medications.
+const SYSTEM_PROMPT = `You are a Vietnamese prescription parser. The input is raw OCR text from a photo of a paper prescription — expect messy, misaligned, and sometimes truncated text.
 
-Return a JSON array. Each element:
-- name: the EXACT YOLO class name if it matches the prescription drug, or the original prescription name if it does not match any class
-- known: true if the name is an EXACT match or obvious rebrand of a YOLO class entry (e.g. "Panactol" = "panactol 500mg"), false if you are unsure or it does not appear in the class list
-- quantity: total pill count (number, 0 if unclear)
-- session: one of "none" | "morning" | "noon" | "afternoon" | "evening" — map Vietnamese time words: sáng→morning, trưa→noon, chiều→afternoon, tối→evening. If multiple sessions, pick the first one mentioned. If no time info, use "none".
-- condition: one of "none" | "before_eat" | "after_eat" — map: trước ăn/sau khi ăn → before_eat/after_eat. If unclear, use "none".
+Extract all medications. For each, return:
+- name: the generic drug name (strip brand names in parentheses, e.g. "Etoricoxib(Roticox" → "Etoricoxib")
+- sessions: array of {session, pills} — map: sáng→morning, trưa→noon, chiều→afternoon, tối→evening. Each session mentioned gets its own entry. Must be approximated to the nearst hundred (if it is a floating expression). Example: 1/3 -> 0.33
+- dosage: the strength, e.g. "90mg", "500mg" (empty string if not found)
+- quantity: total pill count from the prescription (number, 0 if unclear).
+- condition: "none" | "before_eat" | "after_eat" — map: trước ăn→before_eat, sau ăn→after_eat
 
 Rules:
-- ONLY set known=true if the drug name exactly matches or is an obvious rebrand of a YOLO class name. NEVER guess or fuzzy-match.
-- When known=true, the name field MUST be the exact YOLO class name (e.g. "glucofast 850 850mg" not "Glucophage").
-- When known=false, use the original prescription name as written.
-- Only return valid JSON array, no explanation.
-- If you cannot parse a medication, skip it.`
-
-let classNamesCache: Record<string, string> | null = null
-
-async function fetchClassNames(): Promise<Record<string, string>> {
-  if (classNamesCache) return classNamesCache
-  const res = await fetch("/models/class_names.json")
-  classNamesCache = await res.json()
-  return classNamesCache!
-}
+- Ignore non-drug lines: hospital headers, page numbers, dates, footer notes
+- If a drug name is truncated or garbled, use your best guess at the real name
+- If multiple drugs share the same entry number, treat them as separate medications
+- Only return valid JSON array, no explanation
+- If you cannot parse any medication, return []`
 
 export async function POST(req: Request): Promise<NextResponse> {
   const apiKey = process.env.GROQ_API_KEY
@@ -40,17 +31,6 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Missing text" }, { status: 400 })
   }
 
-  let classNames: Record<string, string> = {}
-  try {
-    classNames = await fetchClassNames()
-  } catch {
-    /* LLM parses without class context */
-  }
-
-  const classList = Object.entries(classNames)
-    .map(([id, name]) => `${id}: ${name}`)
-    .join("\n")
-
   const res = await fetch(GROQ_API_URL, {
     method: "POST",
     headers: {
@@ -61,7 +41,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       model: "llama-3.3-70b-versatile",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `OCR text:\n${text}\n\nYOLO class names:\n${classList}` },
+        { role: "user", content: `OCR text:\n${text}` },
       ],
       temperature: 0.1,
       max_tokens: 1024,

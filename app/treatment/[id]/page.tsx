@@ -4,6 +4,7 @@ import * as React from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
   RiArrowLeftLine,
+  RiArrowRightLine,
   RiAddLine,
   RiCameraLine,
   RiImageAddLine,
@@ -26,12 +27,13 @@ import { MedicationCard } from "@/components/common/medication-card"
 import { SessionRow } from "@/components/common/session-row"
 import { getPlan, upsertPlan, generateId } from "@/lib/storage"
 import { ocr } from "@/lib/ocr"
-import { parsePrescription, parseWithLLM } from "@/lib/parser"
+import { parseWithLLM } from "@/lib/parser"
 import { loadCatalog, searchDrugs } from "@/lib/catalog"
 import { SESSION_LABELS } from "@/lib/types"
 import type {
   Plan,
   Medication,
+  ParsedMed,
   Session,
   MealTiming,
 } from "@/lib/types"
@@ -87,6 +89,7 @@ export default function TreatmentDetailPage() {
   const [mealTiming, setMealTiming] = React.useState<MealTiming>(null)
   const [notes, setNotes] = React.useState("")
   const [suggestions, setSuggestions] = React.useState<{ name: string; classIds: number[] }[]>([])
+  const [parsedMeds, setParsedMeds] = React.useState<ParsedMed[]>([])
 
   const [editMed, setEditMed] = React.useState<Medication | null>(null)
   const [editName, setEditName] = React.useState("")
@@ -111,28 +114,31 @@ export default function TreatmentDetailPage() {
       })
 
       const results: TextBox[] = await ocr(img)
+      console.log("[OCR] raw text lines:", results.map((r) => r.text))
 
       await loadCatalog()
-      let parsed = parsePrescription(results.map((r) => r.text))
-      if (parsed.length === 0) {
-        const text = results.map((r) => r.text).join("\n")
-        if (text.length > 10) parsed = await parseWithLLM(text)
-      }
+      const text = results.map((r) => r.text).join("\n")
+      const parsed = text.length > 10 ? await parseWithLLM(text) : []
+      console.log("[OCR] parsed medications:", parsed)
 
       if (parsed.length > 0) {
-        const p = parsed[0]
-        setMedName(p.name)
-        setClassId(p.classId)
-        const ds = emptyDoses()
-        for (const d of p.doses) ds[d.session as Session] = { enabled: true, pillCount: d.pillCount }
-        setDoses(ds)
-        setMealTiming(p.mealTiming)
+        setParsedMeds(parsed)
+        fillFormWithMed(parsed[0])
       }
-    } catch {
-      // silent
+    } catch (e) {
+      console.error("[OCR] error:", e)
     } finally {
       setOcrLoading(false)
     }
+  }
+
+  function fillFormWithMed(p: ParsedMed) {
+    setMedName(p.name)
+    setClassId(p.classId)
+    const ds = emptyDoses()
+    for (const d of p.doses) ds[d.session as Session] = { enabled: true, pillCount: d.pillCount }
+    setDoses(ds)
+    setMealTiming(p.mealTiming)
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -162,6 +168,7 @@ export default function TreatmentDetailPage() {
     setMealTiming(null)
     setNotes("")
     setSuggestions([])
+    setParsedMeds([])
   }
 
   function saveMeds(meds: Medication[]) {
@@ -186,6 +193,25 @@ export default function TreatmentDetailPage() {
       createdAt: new Date().toISOString(),
     }
     saveMeds([med])
+    setDialogOpen(false)
+    resetForm()
+  }
+
+  function handleSaveAll() {
+    if (!plan || parsedMeds.length === 0) return
+    const meds: Medication[] = parsedMeds.map((p) => {
+      const activeDoses = p.doses.map((d: { session: Session; pillCount: number }) => ({ session: d.session, pillCount: d.pillCount }))
+      return {
+        id: generateId(),
+        name: p.name,
+        classId: p.classId,
+        doses: activeDoses.length > 0 ? activeDoses : [{ session: "morning" as Session, pillCount: 1 }],
+        mealTiming: p.mealTiming,
+        notes: "",
+        createdAt: new Date().toISOString(),
+      }
+    })
+    saveMeds(meds)
     setDialogOpen(false)
     resetForm()
   }
@@ -301,6 +327,42 @@ export default function TreatmentDetailPage() {
               <p className="text-center text-sm text-muted-foreground">Đang đọc đơn thuốc...</p>
             )}
 
+            {parsedMeds.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                    Thuốc tìm thấy ({parsedMeds.length})
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleSaveAll}
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Lưu tất cả
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {parsedMeds.map((p, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => fillFormWithMed(p)}
+                      className="flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm hover:bg-muted/40"
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">{p.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {p.classId !== null ? `class ${p.classId}` : "không nhận diện"}
+                          {p.doses.length > 0 && ` — ${p.doses.map((d: { session: Session; pillCount: number }) => `${SESSION_LABELS[d.session]} ${d.pillCount}v`).join(", ")}`}
+                        </span>
+                      </div>
+                      <RiArrowRightLine className="size-4 shrink-0 text-muted-foreground" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
@@ -371,9 +433,15 @@ export default function TreatmentDetailPage() {
               <Button variant="outline" className="flex-1" onClick={() => { setDialogOpen(false); resetForm() }}>
                 Hủy
               </Button>
-              <Button className="flex-1" disabled={!canSave} onClick={handleSave}>
-                <RiCheckLine /> Lưu thuốc
-              </Button>
+              {parsedMeds.length > 1 ? (
+                <Button className="flex-1" onClick={handleSaveAll}>
+                  <RiCheckLine /> Lưu tất cả ({parsedMeds.length})
+                </Button>
+              ) : (
+                <Button className="flex-1" disabled={!canSave} onClick={handleSave}>
+                  <RiCheckLine /> Lưu thuốc
+                </Button>
+              )}
             </div>
           </div>
         </DialogContent>
