@@ -29,6 +29,7 @@ import { getPlan, upsertPlan, generateId } from "@/lib/storage"
 import { ocr } from "@/lib/ocr"
 import { parseWithLLM } from "@/lib/parser"
 import { loadCatalog, searchDrugs } from "@/lib/catalog"
+import { classifyOcrQuality } from "@/lib/ocr-quality"
 import { SESSION_LABELS } from "@/lib/types"
 import type {
   Plan,
@@ -83,6 +84,7 @@ export default function TreatmentDetailPage() {
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
   const [ocrLoading, setOcrLoading] = React.useState(false)
   const [ocrError, setOcrError] = React.useState<string | null>(null)
+  const [ocrWarning, setOcrWarning] = React.useState<string | null>(null)
 
   const [medName, setMedName] = React.useState("")
   const [classId, setClassId] = React.useState<number | null>(null)
@@ -116,16 +118,17 @@ export default function TreatmentDetailPage() {
       })
 
       const results: TextBox[] = await ocr(img)
+      const quality = classifyOcrQuality(results)
 
-      await loadCatalog()
-      const text = results.map((r) => r.text).join("\n")
-
-      if (text.length < 10) {
-        setOcrError("Không đọc được đơn thuốc, vui lòng nhập tay")
+      if (!quality.shouldParse) {
+        setOcrError(quality.message)
         return
       }
 
-      const parsed = await parseWithLLM(text)
+      setOcrWarning(quality.status === "low_confidence" ? quality.message : null)
+
+      await loadCatalog()
+      const parsed = await parseWithLLM(quality.text)
 
       if (parsed.length === 0) {
         setOcrError("Không nhận diện được thuốc, vui lòng nhập tay")
@@ -178,6 +181,8 @@ export default function TreatmentDetailPage() {
     setNotes("")
     setSuggestions([])
     setParsedMeds([])
+    setOcrError(null)
+    setOcrWarning(null)
   }
 
   function saveMeds(meds: Medication[]) {
@@ -190,7 +195,6 @@ export default function TreatmentDetailPage() {
   function handleSave() {
     if (!plan || !medName.trim()) return
     const enabled = Object.entries(doses).filter(([, s]) => s.enabled)
-    if (enabled.length === 0) return
 
     const med: Medication = {
       id: generateId(),
@@ -215,7 +219,7 @@ export default function TreatmentDetailPage() {
         id: generateId(),
         name: p.name,
         classId: p.classId,
-        doses: activeDoses.length > 0 ? activeDoses : [{ session: "morning" as Session, pillCount: 1 }],
+        doses: activeDoses,
         mealTiming: p.mealTiming,
         unit: p.unit,
         notes: "",
@@ -272,7 +276,7 @@ export default function TreatmentDetailPage() {
 
   if (!loaded || !plan) return null
 
-  const canSave = medName.trim().length > 0 && Object.values(doses).some((s) => s.enabled)
+  const canSave = medName.trim().length > 0
 
   return (
     <div className="min-h-svh bg-background">
@@ -341,6 +345,12 @@ export default function TreatmentDetailPage() {
             {ocrError && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
                 {ocrError}
+              </div>
+            )}
+
+            {ocrWarning && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                {ocrWarning}
               </div>
             )}
 
@@ -418,7 +428,7 @@ export default function TreatmentDetailPage() {
 
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium">
-                Buổi uống <span className="text-destructive">*</span>
+                Buổi uống <span className="font-normal text-muted-foreground">(tùy chọn)</span>
               </label>
               {SESSIONS.map(({ key, label, icon }) => {
                 const s = doses[key]
