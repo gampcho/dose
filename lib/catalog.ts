@@ -1,6 +1,3 @@
-import type { Detection } from "@/lib/yolo"
-import type { Result } from "@/lib/types"
-
 let classNames: Record<number, string> | null = null
 let drugToIds: Map<string, number[]> | null = null
 
@@ -78,67 +75,4 @@ export function findDrug(text: string): {
   }
 
   return null
-}
-
-export function comparePills(
-  expected: Record<number, number>,
-  detections: Detection[],
-  unitMap: Record<number, string>,
-): Result[] {
-  const detected = new Map<number, { count: number; conf: number }>()
-  for (const d of detections) {
-    const prev = detected.get(d.classId)
-    if (prev) {
-      prev.count++
-      prev.conf = Math.max(prev.conf, d.confidence)
-    } else {
-      detected.set(d.classId, { count: 1, conf: d.confidence })
-    }
-  }
-
-  const results: Result[] = []
-
-  for (const [classIdStr, expectedCount] of Object.entries(expected)) {
-    const classId = Number(classIdStr)
-    const det = detected.get(classId)
-    detected.delete(classId)
-
-    const detectedCount = det?.count ?? 0
-    const confidence = det?.conf ?? 0
-
-    let status: Result["status"]
-    if (detectedCount > 0 && confidence < 0.65) {
-      status = "unclear"
-    } else if (detectedCount === 0 || detectedCount < expectedCount) {
-      status = "missing"
-    } else if (detectedCount > expectedCount) {
-      status = "extra"
-    } else {
-      status = "correct"
-    }
-
-    results.push({
-      classId,
-      name: getClassName(classId),
-      expected: expectedCount,
-      detected: detectedCount,
-      confidence,
-      unit: unitMap[classId] ?? "viên",
-      status,
-    })
-  }
-
-  for (const [classId, det] of detected) {
-    results.push({
-      classId,
-      name: getClassName(classId),
-      expected: 0,
-      detected: det.count,
-      confidence: det.conf,
-      unit: unitMap[classId] ?? "viên",
-      status: "extra",
-    })
-  }
-
-  return results
 }
