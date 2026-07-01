@@ -28,12 +28,21 @@ export default function GlobalVerifyPage() {
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const cameraInputRef = React.useRef<HTMLInputElement>(null)
 
+  function readSavedImage(): string | null {
+    const saved = sessionStorage.getItem(IMAGE_KEY)
+    if (!saved) return null
+    if (!saved.startsWith("blob:")) return saved
+
+    sessionStorage.removeItem(IMAGE_KEY)
+    return null
+  }
+
   React.useEffect(() => {
     const plans = listPlans()
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from localStorage on mount
     setPlanCount(plans.length)
     setTotalMeds(plans.reduce((s, p) => s + p.medications.length, 0))
-    const saved = sessionStorage.getItem(IMAGE_KEY)
+    const saved = readSavedImage()
     if (saved) setImagePreview(saved)
   }, [])
 
@@ -49,6 +58,11 @@ export default function GlobalVerifyPage() {
     const file = e.target.files?.[0]
     if (file) handleFile(file)
     e.target.value = ""
+  }
+
+  function clearImagePreview() {
+    setImagePreview(null)
+    sessionStorage.removeItem(IMAGE_KEY)
   }
 
   function handleVerify() {
@@ -108,13 +122,11 @@ export default function GlobalVerifyPage() {
               <img
                 src={imagePreview}
                 alt="Khay thuốc"
+                onError={clearImagePreview}
                 className="max-h-72 w-full bg-muted/30 object-contain"
               />
               <button
-                onClick={() => {
-                  setImagePreview(null)
-                  sessionStorage.removeItem(IMAGE_KEY)
-                }}
+                onClick={clearImagePreview}
                 className="absolute top-3 right-3 flex size-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity hover:bg-black/70"
               >
                 <RiCloseLine className="size-4" />
