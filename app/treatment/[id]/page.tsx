@@ -82,6 +82,7 @@ export default function TreatmentDetailPage() {
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
   const [ocrLoading, setOcrLoading] = React.useState(false)
+  const [ocrError, setOcrError] = React.useState<string | null>(null)
 
   const [medName, setMedName] = React.useState("")
   const [classId, setClassId] = React.useState<number | null>(null)
@@ -104,27 +105,37 @@ export default function TreatmentDetailPage() {
     const url = URL.createObjectURL(file)
     setImagePreview(url)
     setOcrLoading(true)
+    setOcrError(null)
 
     try {
       const img = new Image()
       img.src = url
       await new Promise<void>((resolve, reject) => {
         img.onload = () => resolve()
-        img.onerror = () => reject(new Error("Cannot load image"))
+        img.onerror = () => reject(new Error("Không thể tải ảnh"))
       })
 
       const results: TextBox[] = await ocr(img)
 
       await loadCatalog()
       const text = results.map((r) => r.text).join("\n")
-      const parsed = text.length > 10 ? await parseWithLLM(text) : []
 
-      if (parsed.length > 0) {
-        setParsedMeds(parsed)
-        fillFormWithMed(parsed[0])
+      if (text.length < 10) {
+        setOcrError("Không đọc được đơn thuốc, vui lòng nhập tay")
+        return
       }
+
+      const parsed = await parseWithLLM(text)
+
+      if (parsed.length === 0) {
+        setOcrError("Không nhận diện được thuốc, vui lòng nhập tay")
+        return
+      }
+
+      setParsedMeds(parsed)
+      fillFormWithMed(parsed[0])
     } catch {
-      // silently handle OCR errors
+      setOcrError("Không đọc được đơn thuốc, vui lòng nhập tay")
     } finally {
       setOcrLoading(false)
     }
@@ -187,7 +198,7 @@ export default function TreatmentDetailPage() {
       classId,
       doses: enabled.map(([key, s]) => ({ session: key as Session, pillCount: s.pillCount })),
       mealTiming,
-      unit: "đơn vị",
+      unit: "viên",
       notes: notes.trim(),
       createdAt: new Date().toISOString(),
     }
@@ -327,6 +338,12 @@ export default function TreatmentDetailPage() {
               <p className="text-center text-sm text-muted-foreground">Đang đọc đơn thuốc...</p>
             )}
 
+            {ocrError && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                {ocrError}
+              </div>
+            )}
+
             {parsedMeds.length > 0 && (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
@@ -412,7 +429,7 @@ export default function TreatmentDetailPage() {
                     icon={icon}
                     enabled={s.enabled}
                     pillCount={s.pillCount}
-                    unit="đơn vị"
+                    unit="viên"
                     onToggle={() => toggleDose(key, doses, setDoses)}
                     onDecrease={() => adjustPillCount(key, -1, doses, setDoses)}
                     onIncrease={() => adjustPillCount(key, 1, doses, setDoses)}
@@ -471,7 +488,7 @@ export default function TreatmentDetailPage() {
                       icon={icon}
                       enabled={s.enabled}
                       pillCount={s.pillCount}
-                      unit="đơn vị"
+                      unit={editMed?.unit ?? "viên"}
                       onToggle={() => toggleDose(key, editDoses, setEditDoses)}
                       onDecrease={() => adjustPillCount(key, -1, editDoses, setEditDoses)}
                       onIncrease={() => adjustPillCount(key, 1, editDoses, setEditDoses)}

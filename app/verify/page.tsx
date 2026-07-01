@@ -1,51 +1,47 @@
 "use client"
 
 import * as React from "react"
-import { useParams, useRouter } from "next/navigation"
-import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   RiArrowLeftLine,
   RiCameraLine,
   RiImageAddLine,
-  RiCapsuleLine,
   RiCloseLine,
   RiRefreshLine,
   RiArrowRightLine,
-  RiPencilLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
-import { getPlan, verifyImageKey } from "@/lib/storage"
-import type { Plan, Session, MealTiming } from "@/lib/types"
-import { SESSION_LABELS } from "@/lib/types"
+import { listPlans } from "@/lib/storage"
+import type { MealTiming } from "@/lib/types"
 
-export default function VerificationPage() {
-  const params = useParams()
+const IMAGE_KEY = "dose:verify:global:image"
+const MEAL_KEY = "dose:verify:global:meal"
+
+export default function GlobalVerifyPage() {
   const router = useRouter()
-  const planId = params.id as string
-
-  const [plan, setPlan] = React.useState<Plan | null>(null)
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
   const [mealTiming, setMealTiming] = React.useState<MealTiming>(null)
+  const [planCount, setPlanCount] = React.useState(0)
+  const [totalMeds, setTotalMeds] = React.useState(0)
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const cameraInputRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
-    const p = getPlan(planId)
-    if (!p) {
-      router.push("/")
-      return
-    }
+    const plans = listPlans()
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from localStorage on mount
-    setPlan(p)
-  }, [planId, router])
+    setPlanCount(plans.length)
+    setTotalMeds(plans.reduce((s, p) => s + p.medications.length, 0))
+    const saved = sessionStorage.getItem(IMAGE_KEY)
+    if (saved) setImagePreview(saved)
+  }, [])
 
   function handleFile(file: File) {
     const url = URL.createObjectURL(file)
     setImagePreview(url)
     if (typeof window !== "undefined") {
-      sessionStorage.setItem(verifyImageKey(planId), url)
+      sessionStorage.setItem(IMAGE_KEY, url)
     }
   }
 
@@ -57,72 +53,32 @@ export default function VerificationPage() {
 
   function handleVerify() {
     if (mealTiming && typeof window !== "undefined") {
-      sessionStorage.setItem(`dose:verify:meal:${planId}`, mealTiming)
+      sessionStorage.setItem(MEAL_KEY, mealTiming)
+    } else if (typeof window !== "undefined") {
+      sessionStorage.removeItem(MEAL_KEY)
     }
-    router.push(`/verification/${planId}/report`)
+    router.push("/verify/report")
   }
-
-  if (!plan) return null
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-3">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => router.push("/")}
-          >
+          <Button variant="ghost" size="icon-sm" onClick={() => router.push("/")}>
             <RiArrowLeftLine />
           </Button>
           <div>
             <p className="font-heading text-base leading-tight font-semibold">
-              {plan.name}
+              Kiểm tra khay thuốc
             </p>
-            <p className="text-xs text-muted-foreground">Kiểm tra khay thuốc</p>
+            <p className="text-xs text-muted-foreground">
+              {planCount} đơn thuốc, {totalMeds} loại thuốc
+            </p>
           </div>
         </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-8">
-        {plan.medications.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Thuốc trong liệu trình
-              </p>
-              <Link
-                href={`/treatment/${planId}`}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              >
-                <RiPencilLine className="size-3" />
-                Sửa
-              </Link>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {plan.medications.map((med) => (
-                <div
-                  key={med.id}
-                  className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-3 py-1.5"
-                >
-                  <RiCapsuleLine className="size-3.5 text-primary" />
-                  <span className="text-xs font-medium">{med.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    (
-                    {med.doses
-                      .map(
-                        (s) =>
-                          `${SESSION_LABELS[s.session as Session]} ${s.pillCount}v`,
-                      )
-                      .join(", ")}
-                    )
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="flex flex-col gap-2">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             Thời điểm uống
@@ -155,7 +111,10 @@ export default function VerificationPage() {
                 className="max-h-72 w-full bg-muted/30 object-contain"
               />
               <button
-                onClick={() => setImagePreview(null)}
+                onClick={() => {
+                  setImagePreview(null)
+                  sessionStorage.removeItem(IMAGE_KEY)
+                }}
                 className="absolute top-3 right-3 flex size-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity hover:bg-black/70"
               >
                 <RiCloseLine className="size-4" />
@@ -163,25 +122,16 @@ export default function VerificationPage() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <Button
-                className="w-full"
-                onClick={handleVerify}
-              >
+              <Button className="w-full" onClick={handleVerify}>
                 Phân tích khay thuốc
                 <RiArrowRightLine />
               </Button>
               <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => cameraInputRef.current?.click()}
-                >
+                <Button variant="outline" onClick={() => cameraInputRef.current?.click()}>
                   <RiRefreshLine />
                   Chụp lại
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                >
+                <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
                   <RiImageAddLine />
                   Đổi ảnh
                 </Button>
@@ -191,11 +141,9 @@ export default function VerificationPage() {
         ) : (
           <div className="flex flex-1 flex-col justify-center gap-6">
             <div className="flex flex-col gap-1 text-center">
-              <p className="font-heading text-lg font-semibold">
-                Chụp ảnh khay thuốc
-              </p>
+              <p className="font-heading text-lg font-semibold">Chụp ảnh khay thuốc</p>
               <p className="text-sm text-muted-foreground">
-                Chụp hoặc tải ảnh lên để kiểm tra với liệu trình
+                Kiểm tra tất cả thuốc từ {planCount} đơn thuốc
               </p>
             </div>
 
@@ -210,9 +158,7 @@ export default function VerificationPage() {
                 </div>
                 <div className="flex flex-col items-center gap-0.5">
                   <span className="text-sm font-semibold">Camera</span>
-                  <span className="text-xs text-muted-foreground">
-                    Chụp trực tiếp
-                  </span>
+                  <span className="text-xs text-muted-foreground">Chụp trực tiếp</span>
                 </div>
               </button>
 
@@ -226,9 +172,7 @@ export default function VerificationPage() {
                 </div>
                 <div className="flex flex-col items-center gap-0.5">
                   <span className="text-sm font-semibold">Tải ảnh lên</span>
-                  <span className="text-xs text-muted-foreground">
-                    Từ thư viện
-                  </span>
+                  <span className="text-xs text-muted-foreground">Từ thư viện</span>
                 </div>
               </button>
             </div>
@@ -236,21 +180,8 @@ export default function VerificationPage() {
         )}
       </main>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFileChange}
-      />
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleFileChange}
-      />
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
     </div>
   )
 }

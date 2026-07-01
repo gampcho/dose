@@ -8,10 +8,10 @@ const SYSTEM_PROMPT = `You are a Vietnamese prescription parser. The input is ra
 
 Extract all medications. For each, return:
 - name: the generic drug name (strip brand names in parentheses, e.g. "Etoricoxib(Roticox" → "Etoricoxib")
-- sessions: array of {session, pills} — map: sáng→morning, trưa→noon, chiều→afternoon, tối→evening. Each session mentioned gets its own entry. Must be approximated to the nearst hundred (if it is a floating expression). Example: 1/3 -> 0.33
+- sessions: array of {session, pills} — map: sáng→morning, trưa→noon, chiều→afternoon, tối→evening. Each session mentioned gets its own entry. Must be approximated to the nearst hundred (if it is a floating expression). Example: 1/3 -> 0.33. Also, if the number of pills in a session is denoted as (evening: 0), then dont add it in the final json output.
 - dosage: the strength, e.g. "90mg", "500mg" (empty string if not found)
 - unit: one of "viên" | "ống" | "gói" | "chai" — the drug form. Default to "viên" if unclear.
-- quantity: total pill count from the prescription (number, 0 if unclear).
+- quantity: total pill count from the prescription (number).
 - condition: "none" | "before_eat" | "after_eat" — map: trước ăn→before_eat, sau ăn→after_eat
 
 Rules:

@@ -1,7 +1,6 @@
 import { Geist_Mono, Source_Sans_3, Public_Sans } from "next/font/google"
 
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
 
 const publicSansHeading = Public_Sans({
@@ -27,7 +26,6 @@ export default function RootLayout({
   return (
     <html
       lang="vi"
-      suppressHydrationWarning
       className={cn(
         "antialiased",
         fontMono.variable,
@@ -36,9 +34,7 @@ export default function RootLayout({
         publicSansHeading.variable,
       )}
     >
-      <body>
-        <ThemeProvider defaultTheme="light">{children}</ThemeProvider>
-      </body>
+      <body>{children}</body>
     </html>
   )
 }

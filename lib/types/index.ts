@@ -49,6 +49,7 @@ export interface Result {
   expected: number
   detected: number
   confidence: number
+  unit: string
   status: "correct" | "missing" | "extra" | "unclear"
 }
 

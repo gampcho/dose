@@ -8,22 +8,22 @@ Vietnamese pill tray verification. User creates a treatment plan from a prescrip
 Home                 Treatment             Verify → Report
 ─────                ─────────             ───────────────
 Create plan    →     Add medications  →    Photograph tray
-                     (OCR or manual)       See PASS/FAIL results
+                     (OCR or manual)       See PASS/FAIL/CẦN KIỂM TRA
 ```
 
-**Home** — lists plans. Each plan has "Quản lý thuốc" (add/edit meds) and "Kiểm tra ngay" (verify tray).
+**Home** — lists plans. Each plan has "Quản lý thuốc" (add/edit meds). Prominent "Kiểm tra khay thuốc hôm nay" button for global verification.
 
 **Treatment** (`/treatment/[id]`) — add medications via OCR (upload prescription photo) or manual entry with autocomplete against the YOLO drug catalog. Set session doses (Sáng/Trưa/Chiều/Tối), meal timing, notes.
 
-**Verify** (`/verification/[id]`) — optional meal timing toggle (Trước ăn/Sau ăn). Photograph pill tray. Camera or file upload.
+**Verify** (`/verify`) — global verification. Optional meal timing toggle (Trước ăn/Sau ăn). Photograph pill tray. Camera or file upload.
 
-**Report** (`/verification/[id]/report`) — YOLO detects pills in photo. System compares detected pills against the plan's expected medications for the current time of day. Shows:
+**Report** (`/verify/report`) — YOLO detects pills in photo. System compares detected pills against ALL plans' expected medications for the current time of day. Shows:
 
 | Section | Shows |
 |---|---|
 | Known drugs (with doses) | Expected vs detected count per drug. Status: correct / missing / extra / unclear |
 | Identity-only (no doses set) | "Có trong khay ✓" or "Không tìm thấy ✗" — presence check only |
-| Unknown (not in YOLO model) | Red warning box. Manual verification needed. |
+| Unknown (not in YOLO model) | Amber warning box. Manual verification needed. |
 
 Buttons: "Chụp lại" (retake photo), "Về trang chủ" (go home).
 
@@ -43,19 +43,20 @@ Dose        = { session: Session, pillCount: number }
 // A single intake. "Sáng 2 viên" → { session: "morning", pillCount: 2 }
 
 Medication  = { id, name, classId: number|null, doses: Dose[],
-                mealTiming: MealTiming, notes, createdAt }
+                mealTiming: MealTiming, unit: string, notes, createdAt }
 // A drug in a treatment plan.
 // classId = YOLO class (0-107). null = unknown/not-in-model.
 // doses = [] means no session info → identity-only check.
+// unit = "viên" | "ống" | "gói" | "chai" — drug form from LLM extraction.
 
 Plan        = { id, name, medications: Medication[], createdAt }
 // One treatment plan. Stored in localStorage.
 
-ParsedMed   = { name, classId, matchedName, quantity, dosage,
+ParsedMed   = { name, classId, matchedName, quantity, dosage, unit,
                 doses: Dose[], mealTiming }
 // Parser output. Transient — converted to Medication on save.
 
-Result      = { classId, name, expected, detected, confidence,
+Result      = { classId, name, expected, detected, confidence, unit,
                 status: "correct" | "missing" | "extra" | "unclear" }
 // Verification output. One row per YOLO class.
 // "unclear" triggers when confidence < 0.65 → "vui lòng chụp lại".
@@ -72,8 +73,6 @@ Only used by the LLM API route. Not used in the app itself.
 The Zod `SessionEnum` includes `"none"` because LLMs can't always determine a session from OCR text. The parser maps `"none"` → null. Domain types don't have `"none"` — empty `doses` means no session info.
 
 Domain types (`lib/types`) are plain interfaces for app state. Zod schemas (`types`) are runtime validation for external LLM input. Two files, two purposes.
-
-### Zod Schemas
 
 ---
 
@@ -112,80 +111,71 @@ Examples:
 
 - `loadCatalog()` — fetches JSON files, builds lookup maps. Cached module-level. Call before `findDrug` or `searchDrugs`.
 - `searchDrugs(query)` — returns up to 8 matching drugs for autocomplete. Same matching logic as `findDrug`.
-- `comparePills(expected, detections)` — takes `{ classId→count }` expected map + YOLO detections, returns `Result[]`. Status includes `"unclear"` when confidence < 0.65.
+- `comparePills(expected, detections, unitMap)` — takes `{ classId→count }` expected map + YOLO detections + `{ classId→unit }` map, returns `Result[]`. Status includes `"unclear"` when confidence < 0.65.
 
 ---
 
 ## Prescription Parser (`lib/parser.ts`)
 
-### OCR text format
-
-Vietnamese prescriptions typically follow this pattern:
-```
-1) DRUG_NAME DOSAGE
-SL: TOTAL_QUANTITY Viên
-Ghi chú Uống: Sáng M Viên, Tối N Viên
-```
-
-The parser extracts: drug name, total quantity (SL), per-session doses, meal timing.
-
-### Functions
-
-| Function | Purpose |
-|---|---|
-| `parsePrescription(lines)` | Rule-based parser. State machine over text lines. Returns `ParsedMed[]`. |
-| `parseWithLLM(text)` | Falls back to Groq API when rule parser returns 0 results. |
-| `parseDrugLine(line)` | Strips "1) " prefix, dosage units → extracts drug name. |
-| `parseSessionPills(line)` | Extracts `[{session, pillCount}]` from dosage instructions. |
-
-### Regex patterns
-
-```
-QUANTITY_PATTERN  — /(?:Số lượng|SL|Qty)[:\s]*(\d+)/i      → "SL: 28" → 28
-DOSAGE_PATTERN    — /\b(\d+(?:[.,]\d+)?)\s*(mg|g|ml|mcg|ui)\b/i  → "500mg"
-NEW_ENTRY         — /^\d+[\).:\-]/  ("1) ", "2. ", "3- ") or /^thuốc[:\s]/i
-INSTRUCTIONS      — /ghi\s*chú|lời\s*dặn|cộng\s*khoản/i    → triggers dose extraction
-SESSION_KEYWORDS  — sáng→morning, trưa→noon, chiều→afternoon, tối→evening
-```
-
----
-
-## Verification Engine
+LLM-only parser. No rule-based fallback.
 
 ### How it works
 
-1. **YOLO (`lib/yolo.ts`)** detects all pills in the tray photo → `Detection[]` (classId + confidence + bbox).
-2. **Report page** calls `getCurrentSession()` for the current time.
-3. **`analyzeDetections(plan, detections, session, mealTiming)`** in the report page:
-   - Skips meds with no doses for the current session.
-   - Skips meds where `mealTiming` doesn't match (if one was selected on the capture page).
-   - Builds `expected: { classId→count }` from matching doses.
-   - Meds with `classId: null` (not in model) → shown in red warning box.
-   - Meds with `doses: []` (no schedule) → identity-only check (present/absent in tray).
-4. **`comparePills(expected, detections)`** → `Result[]` with status per class.
-5. **Rendered** via `ResultRow` component — color-coded by status.
+1. OCR extracts text from prescription photo (PaddleOCR detection + Tesseract recognition).
+2. `parseWithLLM(text)` sends raw OCR text to Groq API (`llama-3.3-70b-versatile`).
+3. LLM extracts: drug name, sessions (sáng→morning, trưa→noon, chiều→afternoon, tối→evening), dosage, unit (viên/ống/gói/chai), quantity, meal timing.
+4. `findDrug()` maps each extracted name to YOLO class IDs.
+5. Returns `ParsedMed[]` for user to review and save.
+
+### Failure states
+
+- OCR text < 10 chars → "Không đọc được đơn thuốc, vui lòng nhập tay"
+- LLM returns 0 results → "Không nhận diện được thuốc, vui lòng nhập tay"
+- LLM API error → "Không đọc được đơn thuốc, vui lòng nhập tay"
+
+---
+
+## Verification Engine (`lib/verification.ts`)
+
+Shared verification logic used by `/verify/report`.
+
+### Input
+
+- `plans: Plan[]` — all saved treatment plans
+- `detections: Detection[]` — YOLO detections from tray photo
+- `session: Session` — current time session
+- `mealTiming: MealTiming` — optional meal timing filter
+
+### Output
+
+```typescript
+VerificationResult = {
+  results: Result[]           // known scheduled meds with status
+  identityMeds: IdentityMed[] // identity-only meds (no doses)
+  unknownMeds: Medication[]   // meds not in YOLO model
+  unknownDetected: number     // detected pills matching unknown meds
+  status: "pass" | "fail" | "manual_check"
+}
+```
+
+### How it works
+
+1. Merges all medications from all plans.
+2. For each med, classifies into: scheduled (has doses for current session), identity (no doses), unknown (not in model).
+3. For scheduled meds, builds expected map and runs `comparePills()`.
+4. Merges multi-class drug results (same drug, different YOLO classes).
+5. Computes overall status:
+   - **PASS**: all scheduled known meds match, no extras/unclears
+   - **FAIL**: any scheduled known med is missing/extra/unclear
+   - **MANUAL_CHECK**: scheduled meds pass, but identity-only meds absent or unknown meds detected
 
 ### Status values
 
-| Status | Meaning | Color | Message |
-|---|---|---|---|
-| `correct` | Detected count matches expected | Green ✓ | Kỳ vọng N viên, Phát hiện N viên |
-| `missing` | Detected < expected (or 0) | Red ✗ | Thiếu N viên — kiểm tra lại khay |
-| `extra` | Detected > expected or not expected | Red ✗ | Phát hiện N viên — thuốc ngoài liệu trình |
-| `unclear` | Confidence < 0.65 | Amber ⚠️ | Không rõ — vui lòng chụp lại |
-
-### Session-aware filtering
-
-When a user verifies at 8am (morning):
-- RENAPRIL (Sáng 1, Tối 1) → expected: 1 (morning dose only)
-- NOVOXIM-500 (no evening dose) → skipped entirely
-- HOẠT HUYẾT DƯỠNG NÃO (Sáng 2, Tối 2) → expected: 2
-
-Pills detected that aren't in the session's expected list show as "extra" — the user sees they shouldn't take that pill now.
-
-### Confidence threshold
-
-`< 0.65` → `"unclear"`. Triggers "vui lòng chụp lại" prompt. The user should retake the photo with better lighting/angle.
+| Status | Meaning | Badge Color |
+|---|---|---|
+| `pass` | All scheduled meds match | Green |
+| `fail` | Missing, extra, or unclear meds | Red |
+| `manual_check` | Identity/unknown meds need review | Amber |
 
 ---
 
@@ -229,26 +219,25 @@ Output tensor layout is Ultralytics YOLO export format: `[cx, cy, w, h, cls0...c
 
 ### When it triggers
 
-`parsePrescription()` returns 0 results AND OCR text length > 10 chars → `parseWithLLM()` calls POST `/api/parse`.
+`parseWithLLM()` is called for every OCR text > 10 chars. This is the primary parsing path.
 
 ### How it works
 
 1. Route receives `{ text }` (raw OCR output).
-2. Loads `class_names.json` from the same server (`/models/class_names.json` — cached per process).
-3. Sends text + class list to **Groq API** (`llama-3.3-70b-versatile`).
-4. Validates response with Zod `Prescription` schema.
-5. Returns `{ prescription: MedicineType[] }`.
+2. Sends text to **Groq API** (`llama-3.3-70b-versatile`).
+3. Validates response with Zod `Prescription` schema.
+4. Returns `{ prescription: MedicineType[] }`.
 
 ### Config
 
 ```
-GROQ_API_KEY  — in .env, required for LLM fallback
+GROQ_API_KEY  — in .env, required for LLM parsing
 Model         — llama-3.3-70b-versatile (hardcoded)
 Temperature   — 0.1 (deterministic)
 Max tokens    — 1024
 ```
 
-No user consent prompt — silent auto-call when rule parser fails.
+No user consent prompt — silent auto-call when user uploads prescription photo.
 
 ---
 
@@ -270,9 +259,9 @@ Old plans stored with `schedules` (old field name) or `known` (removed field) ar
 
 ### Cross-page data
 
-`verifyImageKey(planId)` → `"dose:verify:image:{id}"` — tray photo URL stored in `sessionStorage`. Written by verify page, read by report page. Both pages import the same key function from `lib/storage.ts`.
+`dose:verify:global:image` — tray photo URL stored in `sessionStorage`. Written by verify page, read by report page.
 
-`dose:verify:meal:{planId}` — meal timing selection, same sessionStorage pattern.
+`dose:verify:global:meal` — meal timing selection, same sessionStorage pattern.
 
 ---
 
@@ -285,28 +274,30 @@ dose/
 ├── lib/
 │   ├── types/
 │   │   └── index.ts       Domain types (Plan, Medication, Result, ParsedMed, etc.)
-│   ├── catalog.ts          Drug matching + verification counting
-│   ├── parser.ts           Rule-based prescription parser + LLM fallback
-│   ├── storage.ts          localStorage CRUD + migration
-│   ├── ocr.ts              PaddleOCR detect + Tesseract recognize
-│   ├── yolo.ts             YOLO12s ONNX inference
-│   └── utils.ts            cn() Tailwind class merge
+│   ├── catalog.ts         Drug matching + verification counting
+│   ├── verification.ts    Shared verification engine
+│   ├── parser.ts          LLM-only prescription parser
+│   ├── storage.ts         localStorage CRUD + migration
+│   ├── ocr.ts             PaddleOCR detect + Tesseract recognize
+│   ├── yolo.ts            YOLO12s ONNX inference
+│   └── utils.ts           cn() Tailwind class merge
 ├── app/
-│   ├── page.tsx            Home — plan list, create, delete
-│   ├── layout.tsx          Root HTML, fonts, theme
+│   ├── page.tsx           Home — plan list, create, delete, global verify button
+│   ├── layout.tsx         Root HTML, fonts (light-only, no theme provider)
 │   ├── treatment/[id]/
-│   │   └── page.tsx        Medication management (OCR + manual add, edit, delete)
-│   ├── verification/[id]/
-│   │   ├── page.tsx        Tray capture, meal timing toggle
+│   │   └── page.tsx       Medication management (OCR + manual add, edit, delete)
+│   ├── verify/
+│   │   ├── page.tsx       Global tray capture, meal timing
 │   │   └── report/
-│   │       └── page.tsx    YOLO analysis, result display
+│   │       └── page.tsx   YOLO analysis, shared verification, result display
 │   └── api/parse/
-│       └── route.ts        LLM fallback endpoint
+│       └── route.ts       LLM fallback endpoint
 ├── components/
 │   ├── common/
 │   │   ├── medication-card.tsx   One medication (name, doses, notes)
 │   │   ├── session-row.tsx       Session toggle + pill count stepper
-│   │   └── result-row.tsx        One verification result (correct/missing/extra/unclear)
+│   │   ├── result-row.tsx        One verification result (correct/missing/extra/unclear)
+│   │   └── bbox-overlay.tsx      Canvas-based YOLO bounding boxes
 │   └── ui/
 │       ├── button.tsx, badge.tsx, card.tsx, dialog.tsx,
 │       ├── input.tsx, checkbox.tsx, separator.tsx
@@ -346,17 +337,21 @@ Most users verify at the time they take pills. No manual toggle needed. Verifyin
 
 If a drug says "trước ăn" and the user hasn't eaten, those pills should be in the tray. The toggle on the capture page filters by meal timing. Default is null — no filter.
 
+### Global verification
+
+One tray contains pills from all prescriptions. Global `/verify` merges all plans and checks against one photo. Per-plan verification removed to keep the flow simple.
+
 ### Hybrid OCR
 
 PaddleOCR finds text regions. Tesseract reads Vietnamese text inside each region. Paddle's `rec.onnx` is loaded because the `paddleocr` npm package requires both models for initialization, but its recognition output is discarded in favor of Tesseract's better Vietnamese accuracy.
 
+### LLM-only parser
+
+No rule-based parser. LLM handles messy OCR text, multi-session extraction, unit detection. Simpler codebase, better accuracy.
+
 ### localStorage over IndexedDB
 
 Plans are small JSON arrays. `migrateMed()` handles field renames on read. Simple reads/writes. No schema migrations needed.
-
-### Silent LLM fallback
-
-The rule parser handles 80%+ of prescriptions. LLM is a last resort. No consent dialog — the user expects AI processing when they upload a photo.
 
 ---
 
@@ -365,16 +360,16 @@ The rule parser handles 80%+ of prescriptions. LLM is a last resort. No consent 
 | Case | Behavior |
 |---|---|
 | No sessions on a drug | Identity-only check. "Có trong khay ✓" or "Không tìm thấy ✗". |
-| Drug not in YOLO model | Red warning box. "Thuốc chưa có trong model — kiểm tra thủ công". |
+| Drug not in YOLO model | Amber warning box. "Thuốc chưa có trong model, sẽ cần kiểm tra thủ công". |
 | Pills detected with confidence < 0.65 | `"unclear"` status. Amber warning. "Vui lòng chụp lại". |
 | Empty tray (0 detections) | All expected → missing. Normal FAIL. |
 | Pill in tray but wrong session | `"extra"` — shows as detected but unexpected. |
 | Old localStorage data | `migrateMed()` converts `schedules`→`doses`, drops `known`. |
 | OCR reads "RENAPRI" (truncated) | `findDrug` substring match → "renapril" → class 47 ✓ |
-| OCR reads "Ghi chú" vs "Ghichú" | Regex matches both via `\s*` between words. |
 | Multiple drugs in prescription | OCR parses all. User selects which to save. |
 | Manual entry with catalog match | Autocomplete dropdown → pick → classId auto-set. |
-| No `GROQ_API_KEY` in `.env` | LLM fallback returns empty. Parser shows "nhập thủ công" prompt. |
+| No `GROQ_API_KEY` in `.env` | LLM fallback returns empty. Shows "nhập thủ công" prompt. |
+| OCR/LLM failure | Amber error message: "Không đọc được đơn thuốc, vui lòng nhập tay". |
 
 ---
 
@@ -385,3 +380,4 @@ The rule parser handles 80%+ of prescriptions. LLM is a last resort. No consent 
 - **Vietnamese-first** — all UI, labels, drug names in Vietnamese.
 - **Minimal code** — no comments unless the logic isn't obvious from the name. Functions under 25 lines where possible.
 - **No dependencies on external APIs at runtime** — LLM fallback is optional (gated by `GROQ_API_KEY`).
+- **Light-only UI** — no dark mode, no theme provider.

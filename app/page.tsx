@@ -121,6 +121,14 @@ export default function HomePage() {
           </h1>
         </div>
 
+        <Link href="/verify" className="mb-6 block">
+          <Button size="lg" className="w-full text-base">
+            <RiScanLine />
+            Kiểm tra khay thuốc hôm nay
+            <RiArrowRightLine />
+          </Button>
+        </Link>
+
         {plans.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-dashed py-16 text-center">
             <div className="flex size-14 items-center justify-center rounded-2xl bg-muted">
@@ -216,13 +224,6 @@ function PlanCard({
           <Button variant="outline" size="sm" className="w-full">
             <RiSettings3Line />
             Quản lý thuốc
-          </Button>
-        </Link>
-        <Link href={`/verification/${plan.id}`} className="flex-1">
-          <Button size="sm" className="w-full">
-            <RiScanLine />
-            Kiểm tra ngay
-            <RiArrowRightLine />
           </Button>
         </Link>
       </CardFooter>

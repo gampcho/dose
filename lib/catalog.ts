@@ -83,6 +83,7 @@ export function findDrug(text: string): {
 export function comparePills(
   expected: Record<number, number>,
   detections: Detection[],
+  unitMap: Record<number, string>,
 ): Result[] {
   const detected = new Map<number, { count: number; conf: number }>()
   for (const d of detections) {
@@ -122,6 +123,7 @@ export function comparePills(
       expected: expectedCount,
       detected: detectedCount,
       confidence,
+      unit: unitMap[classId] ?? "viên",
       status,
     })
   }
@@ -133,6 +135,7 @@ export function comparePills(
       expected: 0,
       detected: det.count,
       confidence: det.conf,
+      unit: unitMap[classId] ?? "viên",
       status: "extra",
     })
   }

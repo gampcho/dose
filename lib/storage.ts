@@ -68,6 +68,3 @@ export function deletePlan(id: string): void {
 export function generateId(): string {
   return crypto.randomUUID()
 }
-
-export const verifyImageKey = (planId: string): string =>
-  `dose:verify:image:${planId}`
