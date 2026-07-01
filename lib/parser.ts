@@ -1,30 +1,35 @@
-import { matchClassName, matchDrug } from "@/lib/verify"
+import type { ParsedMed } from "@/lib/types"
+import type { Dose, Session } from "@/lib/types"
+import { findDrug } from "@/lib/catalog"
 
-export interface ParsedMedication {
-  drugName: string
-  quantity: number
-  dosage: string
-  instructions: string
-  session: "none" | "morning" | "noon" | "afternoon" | "evening"
-  condition: "none" | "before_eat" | "after_eat"
-  known: boolean
-  classId: number | null
-  matchedName: string | null
-}
+const QUANTITY_PATTERN = /(?:Số lượng|SL|Qty)[:\s]*(\d+)/i
 
-const QUANTITY_PATTERN = /(?:&L|Số lượng|SL|Qty)[:\s]*(\d+)/i
 const DOSAGE_PATTERN = /\b(\d+(?:[.,]\d+)?)\s*(mg|g|ml|mcg|ui)\b/i
 
-const SESSION_KEYWORDS: Record<string, string> = {
+const DOSAGE_FULL = /\d+(?:[.,]\d+)?\s*(?:mg|g|ml|mcg|ui)/gi
+
+const SESSION_MAP: Record<string, Session> = {
   sáng: "morning",
   trưa: "noon",
   chiều: "afternoon",
   tối: "evening",
 }
 
-export function parsePrescription(lines: string[]): ParsedMedication[] {
-  const medications: ParsedMedication[] = []
-  let current: ParsedMedication | null = null
+function blankMed(): ParsedMed {
+  return {
+    name: "",
+    classId: null,
+    matchedName: null,
+    quantity: 0,
+    dosage: "",
+    doses: [],
+    mealTiming: null,
+  }
+}
+
+export function parsePrescription(lines: string[]): ParsedMed[] {
+  const meds: ParsedMed[] = []
+  let current: ParsedMed | null = null
 
   for (const rawLine of lines) {
     const line = rawLine.trim()
@@ -36,64 +41,55 @@ export function parsePrescription(lines: string[]): ParsedMedication[] {
       /^thuốc[:\s]/i.test(line)
 
     if (isNewEntry) {
-      if (current) medications.push(current)
-      current = extractDrugFromLine(line)
+      if (current) meds.push(current)
+      current = parseDrugLine(line)
       continue
     }
 
     if (!current) continue
 
-    if (/ghichú|lời dặn|cộng khoản/i.test(line)) {
-      current.instructions = extractInstructions(line)
+    if (/ghi\s*chú|lời\s*dặn|cộng\s*khoản/i.test(line)) {
+      current.doses = parseSessionPills(line)
     }
 
-    for (const [kw, session] of Object.entries(SESSION_KEYWORDS)) {
+    for (const [kw, session] of Object.entries(SESSION_MAP)) {
       if (line.toLowerCase().includes(kw)) {
-        current.session = session as ParsedMedication["session"]
+        if (current.doses.length === 0) {
+          current.doses.push({ session, pillCount: 1 })
+        }
       }
     }
 
     if (/trước\s*ăn|trc\s*ăn/i.test(line)) {
-      current.condition = "before_eat"
+      current.mealTiming = "before"
     } else if (/sau\s*(?:khi\s*)?ăn|sau\s*ăn/i.test(line)) {
-      current.condition = "after_eat"
+      current.mealTiming = "after"
     }
 
-    const qty = QUANTITY_PATTERN.exec(line)
-    if (qty) {
-      current.quantity = parseInt(qty[1], 10)
-    }
+    const qm = QUANTITY_PATTERN.exec(line)
+    if (qm) current.quantity = parseInt(qm[1], 10)
 
-    const dosage = DOSAGE_PATTERN.exec(line)
-    if (dosage && !current.dosage) {
-      current.dosage = `${dosage[1]}${dosage[2]}`
-    }
+    const dm = DOSAGE_PATTERN.exec(line)
+    if (dm && !current.dosage) current.dosage = `${dm[1]}${dm[2]}`
   }
 
-  if (current) medications.push(current)
+  if (current) meds.push(current)
 
-  for (const med of medications) {
-    const match = matchDrug(med.drugName)
+  for (const med of meds) {
+    if (!med.name) continue
+    const match = findDrug(med.name)
     if (match) {
       med.classId = match.classIds[0]
-      med.matchedName = match.drug
-      med.known = true
-    } else {
-      const fallback = matchClassName(med.drugName)
-      if (fallback) {
-        med.classId = fallback.classId
-        med.matchedName = fallback.name
-        med.known = true
-      }
+      med.matchedName = match.matchedName
     }
   }
 
-  return medications.filter((m) => m.drugName.length > 0)
+  return meds.filter((m) => m.name.length > 0)
 }
 
 export async function parseWithLLM(
   text: string,
-): Promise<ParsedMedication[]> {
+): Promise<ParsedMed[]> {
   try {
     const res = await fetch("/api/parse", {
       method: "POST",
@@ -104,38 +100,42 @@ export async function parseWithLLM(
     if (!res.ok) return []
 
     const data = await res.json()
-    const meds: {
-      name: string
-      known?: boolean
-      quantity: number
-      session?: string
-      condition?: string
-    }[] = data.prescription ?? data.drugs ?? []
-    if (!Array.isArray(meds)) return []
+    const raw: { name: string; quantity: number; session?: string; condition?: string }[] =
+      data.prescription ?? data.drugs ?? []
 
-    return meds.map(
-      (d) => {
-        const isKnown = d.known === true
-        const match = isKnown ? matchDrug(d.name) : null
-        return {
-          drugName: d.name,
-          quantity: d.quantity ?? 0,
-          dosage: "",
-          instructions: "",
-          session: (d.session as ParsedMedication["session"]) ?? "none",
-          condition: (d.condition as ParsedMedication["condition"]) ?? "none",
-          known: isKnown,
-          classId: match?.classIds[0] ?? null,
-          matchedName: match?.drug ?? null,
-        }
-      },
-    )
+    if (!Array.isArray(raw)) return []
+
+    return raw.map((d) => {
+      const match = findDrug(d.name)
+
+      const session = SESSION_MAP[d.session as keyof typeof SESSION_MAP] ?? null
+      const doses: Dose[] = session
+        ? [{ session, pillCount: d.quantity > 0 ? d.quantity : 1 }]
+        : d.quantity > 0
+          ? [{ session: "morning", pillCount: d.quantity }]
+          : []
+
+      return {
+        name: d.name,
+        classId: match?.classIds[0] ?? null,
+        matchedName: match?.matchedName ?? null,
+        quantity: d.quantity ?? 0,
+        dosage: "",
+        doses,
+        mealTiming:
+          d.condition === "before_eat" ? "before" :
+          d.condition === "after_eat" ? "after" :
+          d.condition === "before" ? "before" :
+          d.condition === "after" ? "after" :
+          null,
+      }
+    })
   } catch {
     return []
   }
 }
 
-function extractDrugFromLine(line: string): ParsedMedication {
+function parseDrugLine(line: string): ParsedMed {
   const cleaned = line
     .replace(/^\d+[\).:\-]\s*/, "")
     .replace(/^[-•]\s*/, "")
@@ -143,85 +143,43 @@ function extractDrugFromLine(line: string): ParsedMedication {
     .replace(/\s+/g, " ")
     .trim()
 
-  let drugName = cleaned
+  let name = cleaned
   let quantity = 0
   let dosage = ""
 
-  const qtyMatch = cleaned.match(QUANTITY_PATTERN)
-  if (qtyMatch) {
-    quantity = parseInt(qtyMatch[1], 10)
-    drugName = drugName.replace(qtyMatch[0], "").trim()
+  const qm = cleaned.match(QUANTITY_PATTERN)
+  if (qm) {
+    quantity = parseInt(qm[1], 10)
+    name = name.replace(qm[0], "").trim()
   }
 
-  const dosageMatch = cleaned.match(DOSAGE_PATTERN)
-  if (dosageMatch) {
-    dosage = `${dosageMatch[1]}${dosageMatch[2]}`
-  }
+  const dm = cleaned.match(DOSAGE_PATTERN)
+  if (dm) dosage = `${dm[1]}${dm[2]}`
 
-  const dosagePattern = /\d+(?:[.,]\d+)?\s*(?:mg|g|ml|mcg|ui)/gi
-  const drugParts = drugName.split(dosagePattern)
-  drugName = drugParts[0].trim()
+  const parts = name.split(DOSAGE_FULL)
+  name = parts[0].trim()
 
-  if (drugName.length < 2 && cleaned.length > drugName.length) {
-    drugName = cleaned
-      .replace(/\d+(?:[.,]\d+)?\s*(?:mg|g|ml|mcg|ui)/gi, "")
+  if (name.length < 2 && cleaned.length > name.length) {
+    name = cleaned
+      .replace(DOSAGE_FULL, "")
       .replace(/&L.*$/i, "")
       .replace(/\s+/g, " ")
       .trim()
   }
 
-  return {
-    drugName,
-    quantity,
-    dosage,
-    instructions: "",
-    session: "none",
-    condition: "none",
-    known: false,
-    classId: null,
-    matchedName: null,
-  }
+  return { ...blankMed(), name, quantity, dosage }
 }
 
-function extractInstructions(line: string): string {
-  const parts: string[] = []
+function parseSessionPills(line: string): Dose[] {
+  const results: Dose[] = []
 
-  for (const [kw, session] of Object.entries(SESSION_KEYWORDS)) {
+  for (const [kw, session] of Object.entries(SESSION_MAP)) {
     const regex = new RegExp(`${kw}\\s*(\\d+)\\s*viên`, "gi")
-    const match = regex.exec(line)
-    if (match) {
-      const sessionLabel =
-        session === "morning"
-          ? "Sáng"
-          : session === "noon"
-            ? "Trưa"
-            : session === "afternoon"
-              ? "Chiều"
-              : "Tối"
-      parts.push(`${sessionLabel} ${match[1]} viên`)
+    const m = regex.exec(line)
+    if (m) {
+      results.push({ session, pillCount: parseInt(m[1], 10) })
     }
   }
 
-  if (parts.length === 0) {
-    const noteMatch = line.match(/(?:ghichú|lời dặn)[:\s]*(.+)/i)
-    return noteMatch?.[1]?.trim() ?? ""
-  }
-
-  return parts.join(", ")
-}
-
-export function parseInstructions(
-  instructions: string,
-): { session: string; pillCount: number }[] {
-  const result: { session: string; pillCount: number }[] = []
-
-  for (const [kw, session] of Object.entries(SESSION_KEYWORDS)) {
-    const regex = new RegExp(`${kw}\\s*(\\d+)\\s*viên`, "gi")
-    const match = regex.exec(instructions)
-    if (match) {
-      result.push({ session, pillCount: parseInt(match[1], 10) })
-    }
-  }
-
-  return result
+  return results
 }

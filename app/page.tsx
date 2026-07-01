@@ -20,31 +20,35 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { getPlans, upsertPlan, deletePlan, generateId } from "@/lib/storage"
-import type { TreatmentPlan } from "@/lib/types"
+import { listPlans, upsertPlan, deletePlan, generateId } from "@/lib/storage"
+import type { Plan } from "@/lib/types"
 
 export default function HomePage() {
-  const [plans, setPlans] = React.useState<TreatmentPlan[]>(() => {
-    if (typeof window === "undefined") return []
-    return getPlans()
-  })
+  const [plans, setPlans] = React.useState<Plan[]>([])
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from localStorage on mount
+    setPlans(listPlans())
+    setMounted(true)
+  }, [])
 
   function handleCreate() {
-    const allPlans = getPlans()
-    const plan: TreatmentPlan = {
+    const all = listPlans()
+    const plan: Plan = {
       id: generateId(),
-      name: `Đơn thuốc ${allPlans.length + 1}`,
+      name: `Đơn thuốc ${all.length + 1}`,
       medications: [],
       createdAt: new Date().toISOString(),
     }
     upsertPlan(plan)
-    setPlans(getPlans())
+    setPlans(listPlans())
   }
 
   function handleDelete(id: string, e: React.MouseEvent) {
     e.preventDefault()
     deletePlan(id)
-    setPlans(getPlans())
+    setPlans(listPlans())
   }
 
   const [now, setNow] = React.useState<Date | null>(null)
@@ -56,16 +60,14 @@ export default function HomePage() {
   }, [])
 
   const hour = now?.getHours() ?? 12
-  const TimeIcon =
-    hour >= 5 && hour < 10
-      ? RiSunFoggyLine
-      : hour >= 10 && hour < 13
-        ? RiSunLine
-        : hour >= 13 && hour < 18
-          ? RiSunFoggyLine
-          : hour >= 18 && hour < 21
-            ? RiMoonFoggyLine
-            : RiMoonLine
+
+  const TimeIcon = (() => {
+    if (hour >= 5 && hour < 10) return RiSunFoggyLine
+    if (hour >= 10 && hour < 14) return RiSunLine
+    if (hour >= 14 && hour < 18) return RiSunFoggyLine
+    if (hour >= 18 && hour < 21) return RiMoonFoggyLine
+    return RiMoonLine
+  })()
 
   const today = now?.toLocaleDateString("vi-VN", {
     weekday: "long",
@@ -78,9 +80,25 @@ export default function HomePage() {
     second: "2-digit",
   }) ?? ""
 
+  if (!mounted) {
+    return (
+      <div className="min-h-svh bg-background">
+        <header className="border-b bg-background">
+          <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-4">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-8 items-center justify-center rounded-xl bg-primary">
+                <RiMedicineBottleLine className="size-4 text-primary-foreground" />
+              </div>
+              <span className="font-heading text-lg font-semibold tracking-tight">DOSE</span>
+            </div>
+          </div>
+        </header>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-svh bg-background">
-      {/* Header */}
       <header className="border-b bg-background">
         <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-4">
           <div className="flex items-center gap-2.5">
@@ -93,7 +111,6 @@ export default function HomePage() {
       </header>
 
       <main className="mx-auto max-w-lg px-4 py-6">
-        {/* Greeting */}
         <div className="mb-6">
           <p className="flex items-center gap-1.5 text-sm text-muted-foreground capitalize">
             <TimeIcon className="size-4 shrink-0" />
@@ -105,7 +122,6 @@ export default function HomePage() {
         </div>
 
         {plans.length === 0 ? (
-          /* Empty state */
           <div className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-dashed py-16 text-center">
             <div className="flex size-14 items-center justify-center rounded-2xl bg-muted">
               <RiFileListLine className="size-7 text-muted-foreground" />
@@ -132,7 +148,6 @@ export default function HomePage() {
               />
             ))}
 
-            {/* Add button */}
             <button
               onClick={handleCreate}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
@@ -143,7 +158,6 @@ export default function HomePage() {
           </div>
         )}
       </main>
-
     </div>
   )
 }
@@ -153,7 +167,7 @@ function PlanCard({
   index,
   onDelete,
 }: {
-  plan: TreatmentPlan
+  plan: Plan
   index: number
   onDelete: (e: React.MouseEvent) => void
 }) {
@@ -162,12 +176,10 @@ function PlanCard({
   return (
     <Card>
       <CardContent className="flex items-center gap-4 py-4">
-        {/* Index badge */}
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
           <span className="font-heading text-sm font-bold text-primary">{index}</span>
         </div>
 
-        {/* Info */}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <p className="font-medium leading-snug">{plan.name}</p>
           <div className="flex items-center gap-2">
@@ -189,7 +201,6 @@ function PlanCard({
           </div>
         </div>
 
-        {/* Delete */}
         <Button
           variant="ghost"
           size="icon-sm"

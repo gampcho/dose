@@ -3,8 +3,6 @@ import { Geist_Mono, Source_Sans_3, Public_Sans } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
-import { Toaster } from "@/components/ui/sonner"
-import { TooltipProvider } from "@/components/ui/tooltip"
 
 const publicSansHeading = Public_Sans({
   subsets: ["latin"],
@@ -28,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="vi"
       suppressHydrationWarning
       className={cn(
         "antialiased",
@@ -39,10 +37,7 @@ export default function RootLayout({
       )}
     >
       <body>
-        <ThemeProvider defaultTheme="light">
-          <TooltipProvider>{children}</TooltipProvider>
-        </ThemeProvider>
-        <Toaster />
+        <ThemeProvider defaultTheme="light">{children}</ThemeProvider>
       </body>
     </html>
   )

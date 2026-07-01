@@ -14,40 +14,100 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { getPlan } from "@/lib/storage"
+import { verifyImageKey } from "@/lib/storage"
 import { ResultRow } from "@/components/common/result-row"
 import { detect } from "@/lib/yolo"
-import { loadClassNames, matchDrug, verify } from "@/lib/verify"
-import type { TreatmentPlan, Medication, MedicationResult } from "@/lib/types"
+import type { Detection } from "@/lib/yolo"
+import { loadCatalog, findDrug, comparePills } from "@/lib/catalog"
+import type { Plan, Medication, Result } from "@/lib/types"
+import { getCurrentSession, SESSION_LABELS } from "@/lib/types"
+import type { Session, MealTiming } from "@/lib/types"
+
+function analyzeDetections(plan: Plan, detections: Detection[], session: Session, mealTiming: MealTiming): {
+  results: Result[]
+  unknownMeds: Medication[]
+  identityMeds: { med: Medication; present: boolean; name: string }[]
+  unknownDetected: number
+} {
+  const expected: Record<number, number> = {}
+  const unknown: Medication[] = []
+  const identity: { med: Medication; present: boolean; name: string }[] = []
+
+  for (const med of plan.medications) {
+    if (med.doses.length === 0) {
+      const match = findDrug(med.name)
+      const classIds = med.classId !== null ? [med.classId] : match?.classIds ?? []
+      const present = classIds.length > 0 && detections.some((d) => classIds.includes(d.classId))
+      identity.push({ med, present, name: match?.matchedName ?? med.name })
+      continue
+    }
+
+    const doses = med.doses.filter((d) => {
+      if (d.session !== session) return false
+      if (mealTiming && med.mealTiming && med.mealTiming !== mealTiming) return false
+      return true
+    })
+    if (doses.length === 0) continue
+
+    const total = doses.reduce((s, sc) => s + sc.pillCount, 0)
+
+    const match = findDrug(med.name)
+    const allClassIds = match?.classIds ?? (med.classId !== null ? [med.classId] : [])
+
+    if (allClassIds.length > 0) {
+      for (const cid of allClassIds) {
+        expected[cid] = (expected[cid] ?? 0) + total
+      }
+    } else {
+      unknown.push(med)
+    }
+  }
+
+  const unknownClassIds = new Set(
+    unknown.flatMap((m) => findDrug(m.name)?.classIds ?? []),
+  )
+  const unknownDetected = detections.filter((d) =>
+    unknownClassIds.has(d.classId),
+  ).length
+
+  const results = comparePills(expected, detections)
+
+  return { results, unknownMeds: unknown, identityMeds: identity, unknownDetected }
+}
 
 export default function ReportPage() {
   const params = useParams()
   const router = useRouter()
   const planId = params.id as string
 
-  const [plan, setPlan] = React.useState<TreatmentPlan | null>(null)
+  const [plan, setPlan] = React.useState<Plan | null>(null)
   const [imageUrl, setImageUrl] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
-  const [results, setResults] = React.useState<MedicationResult[]>([])
+  const [results, setResults] = React.useState<Result[]>([])
   const [unknownMeds, setUnknownMeds] = React.useState<Medication[]>([])
+  const [identityMeds, setIdentityMeds] = React.useState<
+    { med: Medication; present: boolean; name: string }[]
+  >([])
   const [unknownDetected, setUnknownDetected] = React.useState(0)
+
   React.useEffect(() => {
     const p = getPlan(planId)
     if (!p) {
       router.push("/")
       return
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from localStorage on mount
     setPlan(p)
-    setImageUrl(sessionStorage.getItem(`dose:verify:image:${planId}`))
+    if (typeof window !== "undefined") {
+      setImageUrl(sessionStorage.getItem(verifyImageKey(planId)))
+    }
   }, [planId, router])
 
   React.useEffect(() => {
     if (!plan || !imageUrl) {
-      if (plan) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setLoading(false)
-      }
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- no image means nothing to analyze
+      if (plan) setLoading(false)
       return
     }
 
@@ -57,7 +117,7 @@ export default function ReportPage() {
       if (!plan || !imageUrl) return
 
       try {
-        await loadClassNames()
+        await loadCatalog()
 
         const img = new Image()
         img.crossOrigin = "anonymous"
@@ -68,53 +128,18 @@ export default function ReportPage() {
         })
 
         const detections = await detect(img)
-
-        const unknown = plan.medications.filter((m) => !m.known)
-        const knownMeds = plan.medications.filter((m) => m.known)
-        const unknownClassIds = new Set(unknown.flatMap((m) => {
-          const match = matchDrug(m.name)
-          return match?.classIds ?? []
-        }))
-
-        const expected: Record<number, number> = {}
-        const matched: { medId: string; medName: string; classId: number }[] = []
-
-        for (const med of knownMeds) {
-          const match = matchDrug(med.name)
-          if (!match) continue
-
-          const totalPills = med.schedules.reduce(
-            (sum, s) => sum + s.pillCount,
-            0,
-          )
-          for (const classId of match.classIds) {
-            expected[classId] = (expected[classId] ?? 0) + totalPills
-            matched.push({ medId: med.id, medName: med.name, classId })
-          }
-        }
-
-        const unknownDetectedCount = detections.filter(
-          (d) => unknownClassIds.has(d.classId),
-        ).length
-
-        const items = verify(expected, detections)
-
-        const medResults: MedicationResult[] = items.map((item) => {
-          const match = matched.find((m) => m.classId === item.classId)
-          return {
-            ...item,
-            name: match?.medName ?? item.name,
-          }
-        })
+        const session = getCurrentSession()
+        const mt = (sessionStorage.getItem(`dose:verify:meal:${planId}`) ?? null) as MealTiming
+        const analysis = analyzeDetections(plan, detections, session, mt)
 
         if (!cancelled) {
-          setResults(medResults)
-          setUnknownMeds(unknown)
-          setUnknownDetected(unknownDetectedCount)
+          setResults(analysis.results)
+          setUnknownMeds(analysis.unknownMeds)
+          setUnknownDetected(analysis.unknownDetected)
+          setIdentityMeds(analysis.identityMeds)
         }
       } catch (e) {
-        if (!cancelled)
-          setError(e instanceof Error ? e.message : "Lỗi không xác định")
+        if (!cancelled) setError(e instanceof Error ? e.message : "Lỗi không xác định")
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -124,36 +149,30 @@ export default function ReportPage() {
     return () => {
       cancelled = true
     }
-  }, [plan, imageUrl])
+  }, [plan, imageUrl, planId])
 
   if (!plan) return null
 
-  const passCount = results.filter((r) => r.status === "pass").length
+  const correctCount = results.filter((r) => r.status === "correct").length
   const extraCount = results.filter((r) => r.status === "extra").length
-  const failCount = results.filter((r) => r.status === "fail").length
-  const overallPass = failCount === 0 && results.length > 0
+  const missingCount = results.filter((r) => r.status === "missing").length
+  const overallPass = missingCount === 0 && extraCount === 0 && results.length > 0
 
   return (
     <div className="min-h-svh bg-background">
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => router.push(`/verification/${planId}`)}
-            >
+            <Button variant="ghost" size="icon-sm" onClick={() => router.push(`/verification/${planId}`)}>
               <RiArrowLeftLine />
             </Button>
             <div>
-              <p className="font-heading text-base leading-tight font-semibold">
-                {plan.name}
-              </p>
-              <p className="text-xs text-muted-foreground">Kết quả kiểm tra</p>
+              <p className="font-heading text-base leading-tight font-semibold">{plan.name}</p>
+              <p className="text-xs text-muted-foreground">Kết quả kiểm tra — Buổi {SESSION_LABELS[getCurrentSession()]}</p>
             </div>
           </div>
 
-          {!loading && (results.length > 0 || unknownMeds.length > 0) && (
+          {!loading && (results.length > 0 || unknownMeds.length > 0 || identityMeds.length > 0) && (
             <Badge
               variant={overallPass ? "default" : "destructive"}
               className={cn(
@@ -178,9 +197,7 @@ export default function ReportPage() {
         {loading && (
           <div className="flex flex-col items-center justify-center gap-4 py-16">
             <div className="size-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            <p className="text-sm text-muted-foreground">
-              Đang phân tích khay thuốc...
-            </p>
+            <p className="text-sm text-muted-foreground">Đang phân tích khay thuốc...</p>
           </div>
         )}
 
@@ -190,7 +207,7 @@ export default function ReportPage() {
           </div>
         )}
 
-        {!loading && !error && (results.length > 0 || unknownMeds.length > 0) && (
+        {!loading && !error && (results.length > 0 || unknownMeds.length > 0 || identityMeds.length > 0) && (
           <>
             <div
               className={cn(
@@ -207,11 +224,9 @@ export default function ReportPage() {
               )}
               <div>
                 <p className="text-sm font-semibold">
-                  {unknownMeds.length > 0 && failCount === 0
-                    ? `${passCount} thuốc đã xác minh, ${unknownMeds.length} thuốc chưa có trong model`
-                    : overallPass
-                      ? "Không phát hiện sai lệch — khay thuốc khớp với liệu trình"
-                      : `Phát hiện ${failCount + extraCount} sai lệch — cần kiểm tra lại trước khi dùng`}
+                  {overallPass
+                    ? "Không phát hiện sai lệch — khay thuốc khớp với liệu trình"
+                    : `Phát hiện ${missingCount + extraCount} sai lệch — cần kiểm tra lại`}
                 </p>
               </div>
             </div>
@@ -232,19 +247,17 @@ export default function ReportPage() {
                     />
                   </div>
                 ) : (
-                  <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
-                    Không có ảnh
-                  </div>
+                    <div className="flex h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed text-sm text-muted-foreground">
+                      <p>Chưa có ảnh khay thuốc — chụp ảnh để kiểm tra</p>
+                    </div>
                 )}
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => router.push(`/verification/${planId}`)}
-                >
+                <Button variant="outline" size="sm" className="w-full" onClick={() => router.push(`/verification/${planId}`)}>
                   <RiRefreshLine />
                   Chụp lại
+                </Button>
+                <Button variant="outline" size="sm" className="w-full" onClick={() => router.push("/")}>
+                  Về trang chủ
                 </Button>
               </div>
 
@@ -259,6 +272,27 @@ export default function ReportPage() {
                   ))}
                 </div>
 
+                {identityMeds.length > 0 && (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/40">
+                    <div className="flex items-center gap-2">
+                      <RiCheckboxCircleFill className="size-4 shrink-0 text-blue-500" />
+                      <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+                        Kiểm tra định danh (không có lịch uống)
+                      </p>
+                    </div>
+                    <div className="mt-2 flex flex-col gap-1">
+                      {identityMeds.map((item) => (
+                        <p key={item.med.id} className="text-xs text-blue-700 dark:text-blue-400">
+                          {item.present ? "✓" : "✗"}{" "}
+                          {item.med.name}
+                          {item.name !== item.med.name ? ` → ${item.name}` : ""}
+                          {item.present ? " — có trong khay" : " — không tìm thấy"}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {unknownMeds.length > 0 && (
                   <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/40">
                     <div className="flex items-center gap-2">
@@ -269,10 +303,10 @@ export default function ReportPage() {
                     </div>
                     <div className="mt-2 flex flex-col gap-1">
                       {unknownMeds.map((med) => {
-                        const total = med.schedules.reduce((s, sch) => s + sch.pillCount, 0)
+                        const total = med.doses.reduce((s, sc) => s + sc.pillCount, 0)
                         return (
                           <p key={med.id} className="text-xs text-red-700 dark:text-red-400">
-                            {med.name} — Ký vọng: {total} viên
+                            {med.name} — Kỳ vọng: {total} viên
                           </p>
                         )
                       })}
@@ -289,33 +323,29 @@ export default function ReportPage() {
 
                 <div className="flex gap-4 rounded-xl bg-muted/40 px-4 py-3 text-sm">
                   <div className="flex flex-1 flex-col items-center gap-0.5">
-                    <span className="text-xl font-bold text-emerald-500">
-                      {passCount}
-                    </span>
+                    <span className="text-xl font-bold text-emerald-500">{correctCount}</span>
                     <span className="text-xs text-muted-foreground">Đúng</span>
                   </div>
                   <div className="w-px bg-border" />
                   <div className="flex flex-1 flex-col items-center gap-0.5">
-                    <span className="text-xl font-bold text-amber-500">
-                      {extraCount}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Ngoài đơn
-                    </span>
+                    <span className="text-xl font-bold text-amber-500">{extraCount}</span>
+                    <span className="text-xs text-muted-foreground">Ngoài đơn</span>
                   </div>
                   <div className="w-px bg-border" />
                   <div className="flex flex-1 flex-col items-center gap-0.5">
-                    <span className="text-xl font-bold text-red-500">
-                      {failCount}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Sai lệch
-                    </span>
+                    <span className="text-xl font-bold text-red-500">{missingCount}</span>
+                    <span className="text-xs text-muted-foreground">Sai lệch</span>
                   </div>
                 </div>
               </div>
             </div>
           </>
+        )}
+
+        {!loading && !error && results.length === 0 && unknownMeds.length === 0 && identityMeds.length === 0 && (
+          <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
+            Không có dữ liệu để hiển thị
+          </div>
         )}
       </main>
     </div>

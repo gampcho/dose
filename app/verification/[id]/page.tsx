@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import {
   RiArrowLeftLine,
   RiCameraLine,
@@ -10,32 +11,25 @@ import {
   RiCloseLine,
   RiRefreshLine,
   RiArrowRightLine,
-  RiFileListLine,
+  RiPencilLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
-import { getPlan } from "@/lib/storage"
-import { ocr } from "@/lib/ocr"
-import { parsePrescription, parseWithLLM } from "@/lib/parser"
-import type { ParsedMedication } from "@/lib/parser"
-import type { TreatmentPlan } from "@/lib/types"
+import { getPlan, verifyImageKey } from "@/lib/storage"
+import type { Plan, Session, MealTiming } from "@/lib/types"
 import { SESSION_LABELS } from "@/lib/types"
-import type { TextBox } from "@/lib/ocr"
 
 export default function VerificationPage() {
   const params = useParams()
   const router = useRouter()
   const planId = params.id as string
 
-  const [plan, setPlan] = React.useState<TreatmentPlan | null>(null)
+  const [plan, setPlan] = React.useState<Plan | null>(null)
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
-  const [ocrText, setOcrText] = React.useState<string>("")
-  const [ocrLoading, setOcrLoading] = React.useState(false)
-  const [parsedMeds, setParsedMeds] = React.useState<ParsedMedication[]>([])
+  const [mealTiming, setMealTiming] = React.useState<MealTiming>(null)
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const cameraInputRef = React.useRef<HTMLInputElement>(null)
-  const prescriptionInputRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     const p = getPlan(planId)
@@ -43,14 +37,16 @@ export default function VerificationPage() {
       router.push("/")
       return
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from localStorage on mount
     setPlan(p)
   }, [planId, router])
 
   function handleFile(file: File) {
     const url = URL.createObjectURL(file)
     setImagePreview(url)
-    sessionStorage.setItem(`dose:verify:image:${planId}`, url)
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(verifyImageKey(planId), url)
+    }
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -59,39 +55,11 @@ export default function VerificationPage() {
     e.target.value = ""
   }
 
-  async function handlePrescription(file: File) {
-    setOcrLoading(true)
-    try {
-      const url = URL.createObjectURL(file)
-      const img = new Image()
-      img.src = url
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve()
-        img.onerror = () => reject(new Error("Cannot load image"))
-      })
-
-      const results: TextBox[] = await ocr(img)
-      const text = results.map((r) => r.text).join("\n")
-      setOcrText(text || "Không nhận diện được văn bản")
-
-      let parsed = parsePrescription(results.map((r) => r.text))
-      if (parsed.length === 0 && text.length > 10) {
-        parsed = await parseWithLLM(text)
-      }
-      setParsedMeds(parsed)
-    } catch (e) {
-      setOcrText(
-        "Lỗi: " + (e instanceof Error ? e.message : "Không xác định"),
-      )
-    } finally {
-      setOcrLoading(false)
+  function handleVerify() {
+    if (mealTiming && typeof window !== "undefined") {
+      sessionStorage.setItem(`dose:verify:meal:${planId}`, mealTiming)
     }
-  }
-
-  function handlePrescriptionChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) handlePrescription(file)
-    e.target.value = ""
+    router.push(`/verification/${planId}/report`)
   }
 
   if (!plan) return null
@@ -119,9 +87,18 @@ export default function VerificationPage() {
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-8">
         {plan.medications.length > 0 && (
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Thuốc trong liệu trình
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Thuốc trong liệu trình
+              </p>
+              <Link
+                href={`/treatment/${planId}`}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <RiPencilLine className="size-3" />
+                Sửa
+              </Link>
+            </div>
             <div className="flex flex-wrap gap-2">
               {plan.medications.map((med) => (
                 <div
@@ -132,9 +109,10 @@ export default function VerificationPage() {
                   <span className="text-xs font-medium">{med.name}</span>
                   <span className="text-xs text-muted-foreground">
                     (
-                    {med.schedules
+                    {med.doses
                       .map(
-                        (s) => `${SESSION_LABELS[s.session]} ${s.pillCount}v`,
+                        (s) =>
+                          `${SESSION_LABELS[s.session as Session]} ${s.pillCount}v`,
                       )
                       .join(", ")}
                     )
@@ -147,63 +125,24 @@ export default function VerificationPage() {
 
         <div className="flex flex-col gap-2">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Đơn thuốc
+            Thời điểm uống
           </p>
-          {ocrLoading ? (
-            <div className="flex items-center gap-3 rounded-xl border bg-muted/40 px-4 py-3">
-              <div className="size-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              <p className="text-sm text-muted-foreground">
-                Đang đọc đơn thuốc...
-              </p>
-            </div>
-          ) : ocrText ? (
-            <div className="rounded-xl border bg-muted/40 px-4 py-3">
-              <p className="whitespace-pre-wrap text-sm">{ocrText}</p>
-              {parsedMeds.length > 0 && (
-                <div className="mt-3 flex flex-col gap-1.5 border-t pt-3">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Thuốc phát hiện: {parsedMeds.length}
-                  </p>
-                  {parsedMeds.map((med, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between rounded-lg bg-background px-2.5 py-1.5 text-xs"
-                    >
-                      <div>
-                        <span className="font-medium">{med.drugName}</span>
-                        {med.matchedName && (
-                          <span className="ml-1 text-muted-foreground">
-                            → {med.matchedName}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-muted-foreground">
-                        {med.quantity > 0 ? `${med.quantity} viên` : ""}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-2"
-                onClick={() => prescriptionInputRef.current?.click()}
+          <div className="flex gap-2">
+            {(["before", "after"] as const).map((val) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setMealTiming(mealTiming === val ? null : val)}
+                className={`flex-1 rounded-lg border py-2.5 text-sm transition-colors ${
+                  mealTiming === val
+                    ? "border-primary bg-primary/10 font-medium text-primary"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted/40"
+                }`}
               >
-                <RiRefreshLine className="size-3.5" />
-                Quét lại
-              </Button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => prescriptionInputRef.current?.click()}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
-            >
-              <RiFileListLine className="size-4" />
-              Quét đơn thuốc (OCR)
-            </button>
-          )}
+                {val === "before" ? "Trước ăn" : "Sau ăn"}
+              </button>
+            ))}
+          </div>
         </div>
 
         {imagePreview ? (
@@ -226,7 +165,7 @@ export default function VerificationPage() {
             <div className="flex flex-col gap-2">
               <Button
                 className="w-full"
-                onClick={() => router.push(`/verification/${planId}/report`)}
+                onClick={handleVerify}
               >
                 Phân tích khay thuốc
                 <RiArrowRightLine />
@@ -311,13 +250,6 @@ export default function VerificationPage() {
         capture="environment"
         className="hidden"
         onChange={handleFileChange}
-      />
-      <input
-        ref={prescriptionInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handlePrescriptionChange}
       />
     </div>
   )

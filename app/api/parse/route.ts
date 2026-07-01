@@ -20,11 +20,13 @@ Rules:
 - Only return valid JSON array, no explanation.
 - If you cannot parse a medication, skip it.`
 
-function buildUserPrompt(text: string, classNames: Record<string, string>): string {
-  const classList = Object.entries(classNames)
-    .map(([id, name]) => `${id}: ${name}`)
-    .join("\n")
-  return `OCR text:\n${text}\n\nYOLO class names:\n${classList}`
+let classNamesCache: Record<string, string> | null = null
+
+async function fetchClassNames(): Promise<Record<string, string>> {
+  if (classNamesCache) return classNamesCache
+  const res = await fetch("/models/class_names.json")
+  classNamesCache = await res.json()
+  return classNamesCache!
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
@@ -40,13 +42,14 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   let classNames: Record<string, string> = {}
   try {
-    const res = await fetch(
-      "https://raw.githubusercontent.com/gampcho/dose/main/public/models/class_names.json",
-    )
-    classNames = await res.json()
+    classNames = await fetchClassNames()
   } catch {
-    // fallback: LLM parses without class context
+    /* LLM parses without class context */
   }
+
+  const classList = Object.entries(classNames)
+    .map(([id, name]) => `${id}: ${name}`)
+    .join("\n")
 
   const res = await fetch(GROQ_API_URL, {
     method: "POST",
@@ -58,7 +61,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       model: "llama-3.3-70b-versatile",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(text, classNames) },
+        { role: "user", content: `OCR text:\n${text}\n\nYOLO class names:\n${classList}` },
       ],
       temperature: 0.1,
       max_tokens: 1024,
