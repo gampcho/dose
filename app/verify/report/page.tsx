@@ -8,6 +8,8 @@ import {
   RiCloseCircleFill,
   RiAlertLine,
   RiRefreshLine,
+  RiVolumeUpLine,
+  RiDownloadLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
@@ -17,13 +19,21 @@ import { cn } from "@/lib/utils"
 import { listPlans } from "@/lib/storage"
 import { ResultRow } from "@/components/common/result-row"
 import { BBoxOverlay } from "@/components/common/bbox-overlay"
-import { detect } from "@/lib/yolo"
 import type { Detection } from "@/lib/yolo"
 import { loadCatalog } from "@/lib/catalog"
 import { verify } from "@/lib/verification"
 import type { VerificationResult } from "@/lib/verification"
 import { getCurrentSession, SESSION_LABELS } from "@/lib/types"
 import type { MealTiming } from "@/lib/types"
+import { buildReportSpeech } from "@/lib/report-speech"
+import {
+  addFeedback,
+  buildFeedbackExport,
+  listFeedback,
+  type FeedbackItem,
+  type FeedbackValue,
+} from "@/lib/feedback"
+import type { Result } from "@/lib/types"
 
 const IMAGE_KEY = "dose:verify:global:image"
 const MEAL_KEY = "dose:verify:global:meal"
@@ -36,6 +46,8 @@ export default function GlobalReportPage() {
   const [error, setError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<VerificationResult | null>(null)
   const [detections, setDetections] = React.useState<Detection[]>([])
+  const [feedbackItems, setFeedbackItems] = React.useState<FeedbackItem[]>([])
+  const [feedbackMessage, setFeedbackMessage] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     const plans = listPlans()
@@ -46,6 +58,7 @@ export default function GlobalReportPage() {
     if (typeof window !== "undefined") {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from sessionStorage on mount
       setImageUrl(sessionStorage.getItem(IMAGE_KEY))
+      setFeedbackItems(listFeedback())
     }
   }, [router])
 
@@ -71,6 +84,7 @@ export default function GlobalReportPage() {
           img.onerror = () => reject(new Error("Không thể tải ảnh"))
         })
 
+        const { detect } = await import("@/lib/yolo")
         const dets = await detect(img)
         const session = getCurrentSession()
         const mt = (sessionStorage.getItem(MEAL_KEY) ?? null) as MealTiming
@@ -93,6 +107,45 @@ export default function GlobalReportPage() {
 
   const status = result?.status
   const hasData = result && (result.results.length > 0 || result.unknownMeds.length > 0 || result.identityMeds.length > 0)
+  const reviewItems = React.useMemo(
+    () => [...feedbackItems, ...latestReviewItems(result)],
+    [feedbackItems, result],
+  )
+  const reviewCount = reviewItems.length
+
+  function speakResult() {
+    if (!result || typeof window === "undefined" || !("speechSynthesis" in window)) return
+
+    const utterance = new SpeechSynthesisUtterance(buildReportSpeech(result))
+    utterance.lang = "vi-VN"
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+  }
+
+  function handleFeedback(result: Result, feedback: FeedbackValue, correctionText?: string) {
+    addFeedback({
+      resultClassId: result.classId,
+      resultName: result.name,
+      expected: result.expected,
+      detected: result.detected,
+      status: result.status,
+      feedback,
+      correctionText,
+    })
+    setFeedbackItems(listFeedback())
+    setFeedbackMessage("Đã lưu phản hồi để kiểm tra lại model")
+  }
+
+  function exportReviewData() {
+    const exported = buildFeedbackExport(reviewItems)
+    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "dose-review-data.json"
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="min-h-svh bg-background">
@@ -169,6 +222,10 @@ export default function GlobalReportPage() {
                   <RiRefreshLine />
                   Chụp lại
                 </Button>
+                <Button variant="outline" size="sm" className="w-full" onClick={speakResult}>
+                  <RiVolumeUpLine />
+                  Nghe kết quả
+                </Button>
                 <Button variant="outline" size="sm" className="w-full" onClick={() => router.push("/")}>
                   Về trang chủ
                 </Button>
@@ -181,9 +238,15 @@ export default function GlobalReportPage() {
 
                 <div className="flex flex-col gap-2">
                   {result!.results.map((r) => (
-                    <ResultRow key={r.classId} result={r} />
+                    <ResultRow key={r.classId} result={r} onFeedback={handleFeedback} />
                   ))}
                 </div>
+
+                {feedbackMessage && (
+                  <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
+                    {feedbackMessage}
+                  </p>
+                )}
 
                 {result!.identityMeds.length > 0 && (
                   <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/40">
@@ -219,20 +282,38 @@ export default function GlobalReportPage() {
                         const total = med.doses.reduce((s, sc) => s + sc.pillCount, 0)
                         return (
                           <p key={med.id} className="text-xs text-amber-700 dark:text-amber-400">
-                            {med.name}: kỳ vọng {total} {med.unit}
+                            {med.name}: kỳ vọng {med.expected ?? total} {med.unit}
                           </p>
                         )
                       })}
                     </div>
                     <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
-                      {result!.unknownDetected > 0
-                        ? `Phát hiện ${result!.unknownDetected} viên, vui lòng kiểm tra thủ công`
-                        : "Không phát hiện thuốc tương ứng, vui lòng kiểm tra thủ công"}
+                      Thuốc chưa có trong model, vui lòng kiểm tra thủ công
                     </p>
                   </div>
                 )}
 
                 <Separator />
+
+                <div className="rounded-xl border bg-card px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">Dữ liệu review model</p>
+                      <p className="text-xs text-muted-foreground">
+                        {reviewCount} mục cần kiểm tra hoặc đã được người dùng phản hồi
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={exportReviewData} disabled={reviewItems.length === 0}>
+                      <RiDownloadLine />
+                      Xuất JSON
+                    </Button>
+                  </div>
+                  {result!.results.some((r) => r.status === "unclear") && (
+                    <p className="mt-2 text-xs text-amber-600">
+                      Có kết quả chưa rõ, nên đưa vào tập review trước khi cập nhật model.
+                    </p>
+                  )}
+                </div>
 
                 <div className="flex gap-4 rounded-xl bg-muted/40 px-4 py-3 text-sm">
                   <div className="flex flex-1 flex-col items-center gap-0.5">
@@ -263,6 +344,35 @@ export default function GlobalReportPage() {
       </main>
     </div>
   )
+}
+
+function latestReviewItems(result: VerificationResult | null): FeedbackItem[] {
+  if (!result) return []
+
+  const createdAt = new Date().toISOString()
+  const unclear = result.results
+    .filter((item) => item.status === "unclear")
+    .map((item) => ({
+      id: `unclear-${item.classId}`,
+      createdAt,
+      resultClassId: item.classId,
+      resultName: item.name,
+      expected: item.expected,
+      detected: item.detected,
+      status: item.status,
+      feedback: "unclear" as const,
+    }))
+
+  const unknown = result.unknownMeds.map((item) => ({
+    id: `unknown-${item.id}`,
+    createdAt,
+    resultName: item.name,
+    expected: item.expected,
+    status: "unknown" as const,
+    feedback: "unclear" as const,
+  }))
+
+  return [...unclear, ...unknown]
 }
 
 function StatusBanner({ status, result }: { status: VerificationResult["status"]; result: VerificationResult }) {

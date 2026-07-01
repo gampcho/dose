@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import {
   RiCheckboxCircleFill,
   RiCloseCircleFill,
@@ -8,8 +9,18 @@ import {
 
 import { cn } from "@/lib/utils"
 import type { Result } from "@/lib/types"
+import type { FeedbackValue } from "@/lib/feedback"
 
-export function ResultRow({ result }: { result: Result }) {
+export function ResultRow({
+  result,
+  onFeedback,
+}: {
+  result: Result
+  onFeedback?: (result: Result, feedback: FeedbackValue, correctionText?: string) => void
+}) {
+  const [correctionText, setCorrectionText] = React.useState("")
+  const [showCorrection, setShowCorrection] = React.useState(false)
+
   const isCorrect = result.status === "correct"
   const isMissing = result.status === "missing"
   const isExtra = result.status === "extra"
@@ -88,6 +99,55 @@ export function ResultRow({ result }: { result: Result }) {
           <p className="text-xs text-amber-600 dark:text-amber-400">
             Không rõ, vui lòng chụp lại
           </p>
+        )}
+
+        {onFeedback && (
+          <div className="mt-2 flex flex-col gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => onFeedback(result, "correct")}
+                className="rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted"
+              >
+                Đúng
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCorrection((current) => !current)}
+                className="rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted"
+              >
+                Sai
+              </button>
+              <button
+                type="button"
+                onClick={() => onFeedback(result, "unclear")}
+                className="rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted"
+              >
+                Không rõ
+              </button>
+            </div>
+            {showCorrection && (
+              <div className="flex gap-2">
+                <input
+                  value={correctionText}
+                  onChange={(e) => setCorrectionText(e.target.value)}
+                  placeholder="Sửa tên thuốc hoặc số lượng"
+                  className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    onFeedback(result, "incorrect", correctionText.trim() || undefined)
+                    setCorrectionText("")
+                    setShowCorrection(false)
+                  }}
+                  className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground"
+                >
+                  Lưu
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
