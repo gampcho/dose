@@ -1,6 +1,6 @@
 import type { Plan, Medication, Result, Session, MealTiming } from "@/lib/types"
 import type { Detection } from "@/lib/yolo"
-import { findDrug, comparePills } from "@/lib/catalog"
+import { findDrug, getClassName } from "@/lib/catalog"
 
 export type OverallStatus = "pass" | "fail" | "manual_check"
 
@@ -10,15 +10,35 @@ export interface IdentityMed {
   name: string
 }
 
+export interface UnknownMed extends Medication {
+  expected: number
+}
+
 export interface VerificationResult {
   results: Result[]
   identityMeds: IdentityMed[]
-  unknownMeds: Medication[]
-  unknownDetected: number
+  unknownMeds: UnknownMed[]
   status: OverallStatus
 }
 
-export function mergeAllPlans(plans: Plan[]): Medication[] {
+interface DrugMatch {
+  classIds: number[]
+  matchedName: string
+}
+
+interface ExpectedGroup {
+  classIds: number[]
+  classId: number
+  expected: number
+  unit: string
+}
+
+interface DetectionSummary {
+  count: number
+  confidence: number
+}
+
+function mergeAllPlans(plans: Plan[]): Medication[] {
   const meds: Medication[] = []
   for (const p of plans) {
     for (const m of p.medications) {
@@ -36,97 +56,192 @@ export function verify(
 ): VerificationResult {
   const meds = mergeAllPlans(plans)
 
-  const expected: Record<number, number> = {}
-  const unitMap: Record<number, string> = {}
-  const unknown: Medication[] = []
+  const expectedGroups = new Map<string, ExpectedGroup>()
+  const unknown: UnknownMed[] = []
   const identity: IdentityMed[] = []
+  const identityClassIds: number[] = []
 
   for (const med of meds) {
     if (med.doses.length === 0) {
-      const match = findDrug(med.name)
-      const classIds = med.classId !== null ? [med.classId] : match?.classIds ?? []
+      const match = matchMedication(med)
+      const classIds = match.classIds
       const present = classIds.length > 0 && detections.some((d) => classIds.includes(d.classId))
-      identity.push({ med, present, name: match?.matchedName ?? med.name })
+      identity.push({ med, present, name: match.matchedName })
+      if (classIds.length > 0) identityClassIds.push(...classIds)
       continue
     }
 
-    const doses = med.doses.filter((d) => {
-      if (d.session !== session) return false
-      if (mealTiming && med.mealTiming && med.mealTiming !== mealTiming) return false
-      return true
-    })
-    if (doses.length === 0) continue
+    const expected = currentDoseCount(med, session, mealTiming)
+    if (expected === 0) continue
 
-    const total = doses.reduce((s, sc) => s + sc.pillCount, 0)
-    const match = findDrug(med.name)
-    const allClassIds = match?.classIds ?? (med.classId !== null ? [med.classId] : [])
-
-    if (allClassIds.length > 0) {
-      for (const cid of allClassIds) {
-        expected[cid] = (expected[cid] ?? 0) + total
-        unitMap[cid] = med.unit
-      }
-    } else {
-      unknown.push(med)
+    const match = matchMedication(med)
+    if (match.classIds.length === 0) {
+      unknown.push({ ...med, expected })
+      continue
     }
+
+    addExpectedGroup(expectedGroups, med, match.classIds, expected)
   }
 
-  const unknownClassIds = new Set(
-    unknown.flatMap((m) => findDrug(m.name)?.classIds ?? []),
+  const remainingDetections = summarizeDetections(detections)
+  const scheduledResults = Array.from(expectedGroups.values()).map((group) =>
+    compareExpectedGroup(group, remainingDetections),
   )
-  const unknownDetected = detections.filter((d) =>
-    unknownClassIds.has(d.classId),
-  ).length
+  consumeIdentityDetections(identityClassIds, remainingDetections)
+  const results = [...scheduledResults, ...extraResults(remainingDetections)]
 
-  const results = comparePills(expected, detections, unitMap)
-
-  const classToDrug = new Map<number, number[]>()
-  for (const med of meds) {
-    const match = findDrug(med.name)
-    if (match && match.classIds.length > 1) {
-      for (const cid of match.classIds) {
-        classToDrug.set(cid, match.classIds)
-      }
-    }
-  }
-
-  const merged = new Map<number, Result>()
-  for (const r of results) {
-    const siblings = classToDrug.get(r.classId)
-    if (siblings) {
-      const existing = siblings.find((id) => merged.has(id) && merged.get(id)!.status !== "missing")
-      if (existing) {
-        const prev = merged.get(existing)!
-        prev.detected += r.detected
-        prev.confidence = Math.max(prev.confidence, r.confidence)
-        if (prev.status === "missing") prev.status = r.status
-        continue
-      }
-    }
-    merged.set(r.classId, r)
-  }
-
-  const mergedResults = Array.from(merged.values())
-  const status = computeStatus(mergedResults, identity, unknownDetected)
+  const status = computeStatus(results, identity, unknown)
 
   return {
-    results: mergedResults,
+    results,
     identityMeds: identity,
     unknownMeds: unknown,
-    unknownDetected,
     status,
   }
+}
+
+function matchMedication(med: Medication): DrugMatch {
+  const match = findDrug(med.name)
+  if (match) return match
+  if (med.classId !== null) {
+    return { classIds: [med.classId], matchedName: med.name }
+  }
+  return { classIds: [], matchedName: med.name }
+}
+
+function currentDoseCount(
+  med: Medication,
+  session: Session,
+  mealTiming: MealTiming,
+): number {
+  return med.doses
+    .filter((dose) => matchesVerificationTime(med, dose.session, session, mealTiming))
+    .reduce((total, dose) => total + dose.pillCount, 0)
+}
+
+function matchesVerificationTime(
+  med: Medication,
+  doseSession: Session,
+  session: Session,
+  mealTiming: MealTiming,
+): boolean {
+  if (doseSession !== session) return false
+  if (!mealTiming || !med.mealTiming) return true
+  return med.mealTiming === mealTiming
+}
+
+function addExpectedGroup(
+  groups: Map<string, ExpectedGroup>,
+  med: Medication,
+  classIds: number[],
+  expected: number,
+): void {
+  const key = classIds.join(",")
+  const current = groups.get(key)
+  if (current) {
+    current.expected += expected
+    return
+  }
+
+  groups.set(key, {
+    classIds,
+    classId: med.classId ?? classIds[0],
+    expected,
+    unit: med.unit,
+  })
+}
+
+function summarizeDetections(detections: Detection[]): Map<number, DetectionSummary> {
+  const detected = new Map<number, DetectionSummary>()
+  for (const detection of detections) {
+    const prev = detected.get(detection.classId)
+    if (prev) {
+      prev.count++
+      prev.confidence = Math.max(prev.confidence, detection.confidence)
+      continue
+    }
+    detected.set(detection.classId, {
+      count: 1,
+      confidence: detection.confidence,
+    })
+  }
+  return detected
+}
+
+function consumeIdentityDetections(
+  classIds: number[],
+  remainingDetections: Map<number, DetectionSummary>,
+): void {
+  for (const classId of classIds) {
+    remainingDetections.delete(classId)
+  }
+}
+
+function compareExpectedGroup(
+  group: ExpectedGroup,
+  remainingDetections: Map<number, DetectionSummary>,
+): Result {
+  const detected = group.classIds.reduce(
+    (total, classId) => total + (remainingDetections.get(classId)?.count ?? 0),
+    0,
+  )
+  const confidence = Math.max(
+    ...group.classIds.map((classId) => remainingDetections.get(classId)?.confidence ?? 0),
+  )
+
+  for (const classId of group.classIds) {
+    remainingDetections.delete(classId)
+  }
+
+  return {
+    classId: group.classId,
+    name: getClassName(group.classId),
+    expected: group.expected,
+    detected,
+    confidence,
+    unit: group.unit,
+    status: getStatus(group.expected, detected, confidence),
+  }
+}
+
+function extraResults(
+  remainingDetections: Map<number, DetectionSummary>,
+): Result[] {
+  return Array.from(remainingDetections.entries()).map(([classId, detection]) => ({
+    classId,
+    name: getClassName(classId),
+    expected: 0,
+    detected: detection.count,
+    confidence: detection.confidence,
+    unit: "viên",
+    status: "extra",
+  }))
+}
+
+function getStatus(
+  expected: number,
+  detected: number,
+  confidence: number,
+): Result["status"] {
+  if (detected > 0 && confidence < 0.65) return "unclear"
+  if (detected < expected) return "missing"
+  if (detected > expected) return "extra"
+  return "correct"
 }
 
 function computeStatus(
   results: Result[],
   identityMeds: IdentityMed[],
-  unknownDetected: number,
+  unknownMeds: Medication[],
 ): OverallStatus {
-  const hasScheduledFail = results.some((r) => r.status === "missing" || r.status === "extra" || r.status === "unclear")
+  const hasScheduledFail = results.some((result) =>
+    result.status === "missing" ||
+    result.status === "extra" ||
+    result.status === "unclear",
+  )
   if (hasScheduledFail) return "fail"
 
-  const hasManualCheck = identityMeds.some((m) => !m.present) || unknownDetected > 0
+  const hasManualCheck = identityMeds.some((med) => !med.present) || unknownMeds.length > 0
   if (hasManualCheck) return "manual_check"
 
   return "pass"

@@ -1,7 +1,7 @@
 """
 End-to-end pipeline tests for DOSE pill tray verification.
 
-Tests the full flow: OCR text → parser → plan → session filter → comparePills → result.
+Tests the full flow: OCR text → parser → plan → session filter → grouped result.
 Uses real catalog data (class_names.json, drug_groups.json) and scenarios from scenarios.json.
 """
 import json
@@ -10,17 +10,15 @@ from pathlib import Path
 
 import pytest
 
-from tests.catalog import loadCatalog, findDrug, comparePills, getClassName, stripDosage, cleanForLookup
+from tests.catalog import loadCatalog, findDrug, getClassName, stripDosage, cleanForLookup
 from tests.parser import parse_prescription
 
 DEMO_DIR = Path(__file__).resolve().parent.parent / "demo"
 SCENARIOS = json.loads((DEMO_DIR / "scenarios.json").read_text())
 
-
 @pytest.fixture(autouse=True)
 def _load_catalog():
     loadCatalog()
-
 
 # ─── Catalog unit tests ─────────────────────────────────────────────
 
@@ -83,7 +81,6 @@ class TestGetClassName:
 
     def test_unknown_class(self):
         assert getClassName(999) == "class_999"
-
 
 # ─── Parser tests ───────────────────────────────────────────────────
 
@@ -170,58 +167,6 @@ class TestParser:
         assert "DIAMICRON" in unknown[0]["name"].upper()
 
 
-# ─── comparePills unit tests ────────────────────────────────────────
-
-class TestComparePills:
-    def test_all_correct(self):
-        expected = {49: 2, 51: 2}
-        detections = [
-            {"classId": 49, "confidence": 0.9},
-            {"classId": 49, "confidence": 0.85},
-            {"classId": 51, "confidence": 0.92},
-            {"classId": 51, "confidence": 0.88},
-        ]
-        results = comparePills(expected, detections)
-        assert len(results) == 2
-        assert all(r["status"] == "correct" for r in results)
-
-    def test_missing(self):
-        expected = {47: 1, 64: 2}
-        detections = [{"classId": 64, "confidence": 0.9}, {"classId": 64, "confidence": 0.85}]
-        results = comparePills(expected, detections)
-        by_class = {r["classId"]: r for r in results}
-        assert by_class[47]["status"] == "missing"
-        assert by_class[47]["detected"] == 0
-        assert by_class[64]["status"] == "correct"
-
-    def test_extra(self):
-        expected = {45: 1}
-        detections = [{"classId": 45, "confidence": 0.9}, {"classId": 13, "confidence": 0.8}]
-        results = comparePills(expected, detections)
-        by_class = {r["classId"]: r for r in results}
-        assert by_class[45]["status"] == "correct"  # 1 expected, 1 detected
-        assert by_class[13]["status"] == "extra"  # 0 expected, 1 detected
-        assert by_class[13]["expected"] == 0
-
-    def test_unclear_low_confidence(self):
-        expected = {49: 1}
-        detections = [{"classId": 49, "confidence": 0.5}]
-        results = comparePills(expected, detections)
-        assert results[0]["status"] == "unclear"
-
-    def test_empty_detections(self):
-        expected = {49: 2, 51: 2}
-        results = comparePills(expected, [])
-        assert all(r["status"] == "missing" for r in results)
-        assert all(r["detected"] == 0 for r in results)
-
-    def test_empty_expected(self):
-        detections = [{"classId": 99, "confidence": 0.9}]
-        results = comparePills({}, detections)
-        assert len(results) == 1
-        assert results[0]["status"] == "extra"
-
-
 # ─── Session filtering tests ────────────────────────────────────────
 
 def session_filter(med: dict, session: str, meal_timing=None) -> int:
@@ -265,12 +210,101 @@ class TestSessionFilter:
         med = {"doses": [], "mealTiming": None}
         assert session_filter(med, "morning") == 0
 
-
 # ─── End-to-end scenario tests ──────────────────────────────────────
+
+def drug_class_ids(med: dict) -> list[int]:
+    match = findDrug(med["name"])
+    if match:
+        return match["classIds"]
+
+    class_id = med.get("classId")
+    return [] if class_id is None else [class_id]
+
+
+def add_expected_group(
+    groups: dict[tuple[int, ...], dict],
+    med: dict,
+    class_ids: list[int],
+    expected: int,
+) -> None:
+    key = tuple(class_ids)
+    if key not in groups:
+        groups[key] = {
+            "classIds": class_ids,
+            "classId": med.get("classId") or class_ids[0],
+            "expected": 0,
+        }
+    groups[key]["expected"] += expected
+
+
+def detection_summary(detections: list[dict]) -> dict[int, dict]:
+    detected = {}
+    for detection in detections:
+        class_id = detection["classId"]
+        confidence = detection["confidence"]
+        if class_id in detected:
+            detected[class_id]["count"] += 1
+            detected[class_id]["confidence"] = max(
+                detected[class_id]["confidence"],
+                confidence,
+            )
+            continue
+        detected[class_id] = {"count": 1, "confidence": confidence}
+    return detected
+
+
+def grouped_status(expected: int, detected: int, confidence: float) -> str:
+    if detected > 0 and confidence < 0.65:
+        return "unclear"
+    if detected < expected:
+        return "missing"
+    if detected > expected:
+        return "extra"
+    return "correct"
+
+
+def compare_grouped_pills(groups: dict[tuple[int, ...], dict], detections: list[dict]) -> list[dict]:
+    detected = detection_summary(detections)
+    results = []
+
+    for group in groups.values():
+        detected_count = sum(
+            detected.get(class_id, {}).get("count", 0)
+            for class_id in group["classIds"]
+        )
+        confidence = max(
+            [detected.get(class_id, {}).get("confidence", 0) for class_id in group["classIds"]],
+            default=0,
+        )
+
+        for class_id in group["classIds"]:
+            detected.pop(class_id, None)
+
+        results.append({
+            "classId": group["classId"],
+            "name": getClassName(group["classId"]),
+            "expected": group["expected"],
+            "detected": detected_count,
+            "confidence": confidence,
+            "status": grouped_status(group["expected"], detected_count, confidence),
+        })
+
+    for class_id, detection in detected.items():
+        results.append({
+            "classId": class_id,
+            "name": getClassName(class_id),
+            "expected": 0,
+            "detected": detection["count"],
+            "confidence": detection["confidence"],
+            "status": "extra",
+        })
+
+    return results
+
 
 def analyze_scenario(scenario: dict) -> dict:
     """
-    Full pipeline: scenario → plan → session filter → comparePills → result.
+    Full pipeline: scenario → plan → session filter → grouped pill result.
     Returns {results, unknown, overall}.
     """
     plan = scenario["plan"]
@@ -278,7 +312,7 @@ def analyze_scenario(scenario: dict) -> dict:
     meal_timing = scenario.get("meal_timing")
     detections = scenario["detections"]
 
-    expected_map = {}
+    expected_groups = {}
     unknown_meds = []
 
     for med in plan["medications"]:
@@ -286,26 +320,30 @@ def analyze_scenario(scenario: dict) -> dict:
         if total == 0:
             continue
 
-        class_id = med.get("classId")
-        match = findDrug(med["name"])
-        all_class_ids = match["classIds"] if match else ([class_id] if class_id is not None else [])
+        class_ids = drug_class_ids(med)
 
-        if len(all_class_ids) > 0:
-            for cid in all_class_ids:
-                expected_map[cid] = expected_map.get(cid, 0) + total
-        else:
-            unknown_meds.append({
-                "name": med["name"],
-                "classId": None,
-                "expected": total,
-                "detected": 0,
-            })
+        if len(class_ids) > 0:
+            add_expected_group(expected_groups, med, class_ids, total)
+            continue
 
-    results = comparePills(expected_map, detections)
+        unknown_meds.append({
+            "name": med["name"],
+            "classId": None,
+            "expected": total,
+            "detected": 0,
+        })
 
-    missing = sum(1 for r in results if r["status"] == "missing")
-    extra = sum(1 for r in results if r["status"] == "extra")
-    overall = "pass" if missing == 0 and extra == 0 and len(results) > 0 else "fail"
+    results = compare_grouped_pills(expected_groups, detections)
+
+    failed = any(r["status"] in {"missing", "extra", "unclear"} for r in results)
+    if failed:
+        overall = "fail"
+    elif len(unknown_meds) > 0:
+        overall = "manual_check"
+    elif len(results) == 0:
+        overall = "fail"
+    else:
+        overall = "pass"
 
     return {
         "results": results,
