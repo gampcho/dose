@@ -20,6 +20,7 @@ export interface Medication {
   classId: number | null
   doses: Dose[]
   mealTiming: MealTiming
+  unit: string
   notes: string
   createdAt: string
 }
@@ -37,6 +38,7 @@ export interface ParsedMed {
   matchedName: string | null
   quantity: number
   dosage: string
+  unit: string
   doses: Dose[]
   mealTiming: MealTiming
 }

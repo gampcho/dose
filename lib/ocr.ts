@@ -97,7 +97,6 @@ export async function ocr(
   img: HTMLImageElement | HTMLCanvasElement,
 ): Promise<TextBox[]> {
   const boxes = await ocrPaddleDetect(img)
-  console.log("[OCR] detected", boxes.length, "text regions")
   if (boxes.length === 0) return []
 
   const canvas = imageToCanvas(img)
@@ -114,7 +113,6 @@ export async function ocr(
     const { data } = await worker.recognize(cropCanvas)
     const text = data.text.trim()
     if (text.length > 0) {
-      console.log("[OCR] box:", box, "text:", JSON.stringify(text), "conf:", data.confidence.toFixed(1))
       results.push({
         bbox: box,
         text,

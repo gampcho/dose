@@ -114,19 +114,17 @@ export default function TreatmentDetailPage() {
       })
 
       const results: TextBox[] = await ocr(img)
-      console.log("[OCR] raw text lines:", results.map((r) => r.text))
 
       await loadCatalog()
       const text = results.map((r) => r.text).join("\n")
       const parsed = text.length > 10 ? await parseWithLLM(text) : []
-      console.log("[OCR] parsed medications:", parsed)
 
       if (parsed.length > 0) {
         setParsedMeds(parsed)
         fillFormWithMed(parsed[0])
       }
-    } catch (e) {
-      console.error("[OCR] error:", e)
+    } catch {
+      // silently handle OCR errors
     } finally {
       setOcrLoading(false)
     }
@@ -189,6 +187,7 @@ export default function TreatmentDetailPage() {
       classId,
       doses: enabled.map(([key, s]) => ({ session: key as Session, pillCount: s.pillCount })),
       mealTiming,
+      unit: "đơn vị",
       notes: notes.trim(),
       createdAt: new Date().toISOString(),
     }
@@ -207,6 +206,7 @@ export default function TreatmentDetailPage() {
         classId: p.classId,
         doses: activeDoses.length > 0 ? activeDoses : [{ session: "morning" as Session, pillCount: 1 }],
         mealTiming: p.mealTiming,
+        unit: p.unit,
         notes: "",
         createdAt: new Date().toISOString(),
       }
@@ -351,10 +351,11 @@ export default function TreatmentDetailPage() {
                     >
                       <div className="flex flex-col gap-0.5">
                         <span className="font-medium">{p.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {p.classId !== null ? `class ${p.classId}` : "không nhận diện"}
-                          {p.doses.length > 0 && ` — ${p.doses.map((d: { session: Session; pillCount: number }) => `${SESSION_LABELS[d.session]} ${d.pillCount}v`).join(", ")}`}
-                        </span>
+                        {p.doses.length > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            {p.doses.map((d: { session: Session; pillCount: number }) => `${SESSION_LABELS[d.session]} ${d.pillCount}${p.unit}`).join(", ")}
+                          </span>
+                        )}
                       </div>
                       <RiArrowRightLine className="size-4 shrink-0 text-muted-foreground" />
                     </button>
@@ -392,7 +393,6 @@ export default function TreatmentDetailPage() {
                       onClick={() => pickSuggestion(s)}
                     >
                       <span>{s.name}</span>
-                      <span className="text-xs text-muted-foreground">class {s.classIds.join(",")}</span>
                     </button>
                   ))}
                 </div>
@@ -412,6 +412,7 @@ export default function TreatmentDetailPage() {
                     icon={icon}
                     enabled={s.enabled}
                     pillCount={s.pillCount}
+                    unit="đơn vị"
                     onToggle={() => toggleDose(key, doses, setDoses)}
                     onDecrease={() => adjustPillCount(key, -1, doses, setDoses)}
                     onIncrease={() => adjustPillCount(key, 1, doses, setDoses)}
@@ -435,7 +436,7 @@ export default function TreatmentDetailPage() {
               </Button>
               {parsedMeds.length > 1 ? (
                 <Button className="flex-1" onClick={handleSaveAll}>
-                  <RiCheckLine /> Lưu tất cả ({parsedMeds.length})
+                  <RiCheckLine /> Lưu tất cả
                 </Button>
               ) : (
                 <Button className="flex-1" disabled={!canSave} onClick={handleSave}>
@@ -470,6 +471,7 @@ export default function TreatmentDetailPage() {
                       icon={icon}
                       enabled={s.enabled}
                       pillCount={s.pillCount}
+                      unit="đơn vị"
                       onToggle={() => toggleDose(key, editDoses, setEditDoses)}
                       onDecrease={() => adjustPillCount(key, -1, editDoses, setEditDoses)}
                       onIncrease={() => adjustPillCount(key, 1, editDoses, setEditDoses)}

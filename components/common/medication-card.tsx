@@ -32,13 +32,13 @@ export function MedicationCard({
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <p className="leading-snug font-medium">{med.name}</p>
           {isUnknown && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">Chưa có trong model — chỉ kiểm tra số lượng</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">Chưa có trong model, chỉ kiểm tra số lượng</p>
           )}
           <div className="flex flex-wrap gap-1">
             {med.doses.length > 0 ? (
               med.doses.map((s) => (
                 <Badge key={s.session} variant="secondary">
-                  {SESSION_LABELS[s.session]} · {s.pillCount} viên
+                  {SESSION_LABELS[s.session]} · {s.pillCount} {med.unit}
                 </Badge>
               ))
             ) : (

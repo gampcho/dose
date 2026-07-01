@@ -18,6 +18,7 @@ export const Medicine = z.object({
   name: z.string().min(1, "Medicine name is required"),
   sessions: z.array(SessionEntry),
   dosage: z.string().optional(),
+  unit: z.string().optional(),
   quantity: z.number().positive(),
   condition: ConditionEnum,
 })
@@ -25,4 +26,3 @@ export const Medicine = z.object({
 export const Prescription = z.array(Medicine)
 
 export type MedicineType = z.infer<typeof Medicine>
-export type PrescriptionType = z.infer<typeof Prescription>

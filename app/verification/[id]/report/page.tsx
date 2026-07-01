@@ -197,7 +197,7 @@ export default function ReportPage() {
             </Button>
             <div>
               <p className="font-heading text-base leading-tight font-semibold">{plan.name}</p>
-              <p className="text-xs text-muted-foreground">Kết quả kiểm tra — Buổi {SESSION_LABELS[getCurrentSession()]}</p>
+              <p className="text-xs text-muted-foreground">Kết quả kiểm tra, Buổi {SESSION_LABELS[getCurrentSession()]}</p>
             </div>
           </div>
 
@@ -254,8 +254,8 @@ export default function ReportPage() {
               <div>
                 <p className="text-sm font-semibold">
                   {overallPass
-                    ? "Không phát hiện sai lệch — khay thuốc khớp với liệu trình"
-                    : `Phát hiện ${missingCount + extraCount} sai lệch — cần kiểm tra lại`}
+                    ? "Không phát hiện sai lệch, khay thuốc khớp với liệu trình"
+                    : `Phát hiện ${missingCount + extraCount} sai lệch, cần kiểm tra lại`}
                 </p>
               </div>
             </div>
@@ -276,7 +276,7 @@ export default function ReportPage() {
                   </div>
                 ) : (
                     <div className="flex h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed text-sm text-muted-foreground">
-                      <p>Chưa có ảnh khay thuốc — chụp ảnh để kiểm tra</p>
+                      <p>Chưa có ảnh khay thuốc, chụp ảnh để kiểm tra</p>
                     </div>
                 )}
 
@@ -314,7 +314,7 @@ export default function ReportPage() {
                           {item.present ? "✓" : "✗"}{" "}
                           {item.med.name}
                           {item.name !== item.med.name ? ` → ${item.name}` : ""}
-                          {item.present ? " — có trong khay" : " — không tìm thấy"}
+                          {item.present ? ", có trong khay" : ", không tìm thấy"}
                         </p>
                       ))}
                     </div>
@@ -334,15 +334,15 @@ export default function ReportPage() {
                         const total = med.doses.reduce((s, sc) => s + sc.pillCount, 0)
                         return (
                           <p key={med.id} className="text-xs text-red-700 dark:text-red-400">
-                            {med.name} — Kỳ vọng: {total} viên
+                            {med.name}: kỳ vọng {total} đơn vị
                           </p>
                         )
                       })}
                     </div>
                     <p className="mt-2 text-xs text-red-600 dark:text-red-500">
                       {unknownDetected > 0
-                        ? `Phát hiện ${unknownDetected} viên — vui lòng kiểm tra thủ công`
-                        : "Không phát hiện viên thuốc tương ứng — vui lòng kiểm tra thủ công"}
+                        ? `Phát hiện ${unknownDetected} đơn vị, vui lòng kiểm tra thủ công`
+                        : "Không phát hiện thuốc tương ứng, vui lòng kiểm tra thủ công"}
                     </p>
                   </div>
                 )}

@@ -30,10 +30,6 @@ export function getClassName(classId: number): string {
   return classNames?.[classId] ?? `class_${classId}`
 }
 
-export function getDrugClassIds(drugName: string): number[] {
-  return drugToIds?.get(drugName.toLowerCase()) ?? []
-}
-
 export function searchDrugs(query: string): { name: string; classIds: number[] }[] {
   if (!drugToIds || query.length < 2) return []
   const q = query.toLowerCase()

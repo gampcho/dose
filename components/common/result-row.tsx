@@ -49,7 +49,7 @@ export function ResultRow({ result }: { result: Result }) {
           <span className="text-muted-foreground">
             Kỳ vọng:{" "}
             <span className="font-semibold text-foreground">
-              {result.expected} viên
+              {result.expected} đơn vị
             </span>
           </span>
           <span className="text-muted-foreground">
@@ -61,7 +61,7 @@ export function ResultRow({ result }: { result: Result }) {
                 (isMissing || isExtra) && "text-red-600",
               )}
             >
-              {result.detected} viên
+              {result.detected} đơn vị
             </span>
           </span>
           {result.confidence > 0 && (
@@ -76,17 +76,17 @@ export function ResultRow({ result }: { result: Result }) {
 
         {isMissing && (
           <p className="text-xs text-red-600 dark:text-red-400">
-            Thiếu {Math.abs(diff)} viên — kiểm tra lại khay
+            Thiếu {Math.abs(diff)} đơn vị, kiểm tra lại khay
           </p>
         )}
         {isExtra && (
           <p className="text-xs text-red-600 dark:text-red-400">
-            Phát hiện {result.detected} viên — thuốc ngoài liệu trình
+            Phát hiện {result.detected} đơn vị, thuốc ngoài liệu trình
           </p>
         )}
         {isUnclear && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            Không rõ — vui lòng chụp lại
+            Không rõ, vui lòng chụp lại
           </p>
         )}
       </div>

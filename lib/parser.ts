@@ -1,5 +1,4 @@
-import type { ParsedMed } from "@/lib/types"
-import type { Dose } from "@/lib/types"
+import type { ParsedMed, Dose } from "@/lib/types"
 import { findDrug } from "@/lib/catalog"
 
 export async function parseWithLLM(
@@ -20,6 +19,7 @@ export async function parseWithLLM(
       quantity: number
       sessions?: { session: string; pills: number }[]
       dosage?: string
+      unit?: string
       condition?: string
     }[] = data.prescription ?? data.drugs ?? []
 
@@ -39,6 +39,7 @@ export async function parseWithLLM(
         matchedName: match?.matchedName ?? null,
         quantity: d.quantity ?? 0,
         dosage: d.dosage ?? "",
+        unit: d.unit ?? "đơn vị",
         doses,
         mealTiming:
           d.condition === "before_eat" ? "before" :

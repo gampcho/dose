@@ -38,6 +38,7 @@ function migrateMed(m: Record<string, unknown>) {
       ?? (m as { schedules?: unknown }).schedules
       ?? [],
     mealTiming: m.mealTiming ?? null,
+    unit: typeof m.unit === "string" ? m.unit : "viên",
     notes: String(m.notes ?? ""),
     createdAt: String(m.createdAt ?? ""),
   }
