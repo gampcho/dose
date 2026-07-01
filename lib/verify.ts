@@ -65,6 +65,8 @@ function similarity(a: string, b: string): number {
   const longer = a.length > b.length ? a : b
   const shorter = a.length > b.length ? b : a
 
+  if (longer.startsWith(shorter)) return 0.95
+  if (shorter.startsWith(longer)) return 0.95
   if (longer.includes(shorter)) return shorter.length / longer.length
 
   const costs: number[] = []
