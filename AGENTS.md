@@ -5,25 +5,25 @@ Vietnamese pill tray verification. User creates a treatment plan from a prescrip
 ## User Flow (3 steps)
 
 ```
-Home                 Treatment             Verify → Report
-─────                ─────────             ───────────────
+Home                 Plan                Verify → Report
+─────                ────                ───────────────
 Create plan    →     Add medications  →    Photograph tray
                      (OCR or manual)       See PASS/FAIL/CẦN KIỂM TRA
 ```
 
 **Home** — lists plans. Each plan has "Quản lý thuốc" (add/edit meds). Prominent "Kiểm tra khay thuốc hôm nay" button for global verification.
 
-**Treatment** (`/treatment/[id]`) — add medications via OCR (upload prescription photo) or manual entry with autocomplete against the YOLO drug catalog. Set session doses (Sáng/Trưa/Chiều/Tối), meal timing, notes.
+**Plan** (`/plan/[id]`) — add medications via OCR (upload prescription photo) or manual entry with autocomplete against the YOLO drug catalog. Set session doses (Sáng/Trưa/Chiều/Tối), meal timing, notes.
 
 **Verify** (`/verify`) — global verification. Optional meal timing toggle (Trước ăn/Sau ăn). Photograph pill tray. Camera or file upload.
 
 **Report** (`/verify/report`) — YOLO detects pills in photo. System compares detected pills against ALL plans' expected medications for the current time of day. Shows:
 
-| Section | Shows |
-|---|---|
-| Known drugs (with doses) | Expected vs detected count per drug. Status: correct / missing / extra / unclear |
-| Identity-only (no doses set) | "Có trong khay ✓" or "Không tìm thấy ✗" — presence check only |
-| Unknown (not in YOLO model) | Amber warning box. Manual verification needed. |
+| Section                      | Shows                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| Known drugs (with doses)     | Expected vs detected count per drug. Status: correct / missing / extra / unclear |
+| Identity-only (no doses set) | "Có trong khay ✓" or "Không tìm thấy ✗" — presence check only                    |
+| Unknown (not in YOLO model)  | Amber warning box. Manual verification needed.                                   |
 
 Buttons: "Chụp lại" (retake photo), "Về trang chủ" (go home).
 
@@ -82,9 +82,9 @@ Maps a drug name (from OCR or manual entry) to YOLO class IDs.
 
 ### Data files
 
-| File | Content |
-|---|---|
-| `public/models/class_names.json` | `{ "0": "paracetamol 500mg", "1": "troysar am 5mg", ... }` — 108 YOLO classes |
+| File                             | Content                                                                                 |
+| -------------------------------- | --------------------------------------------------------------------------------------- |
+| `public/models/class_names.json` | `{ "0": "paracetamol 500mg", "1": "troysar am 5mg", ... }` — 108 YOLO classes           |
 | `public/models/drug_groups.json` | `{ "paracetamol": [0], "novoxim-500": [10, 82], ... }` — 87 drug name → class ID arrays |
 
 `drug_groups.json` is generated from `class_names.json` by stripping dosages and grouping equivalent names. Multiple class IDs per drug handle YOLO training variations (e.g., same drug in different packaging → different classes).
@@ -100,6 +100,7 @@ Three explicit, named steps. No Levenshtein. No `normalize()`.
 3. **Exact match** in cleaned catalog map → if not found, **contains match** (key includes input or input includes key)
 
 Examples:
+
 ```
 "PARACETAMOL 500MG" → "paracetamol" → exact → [0] ✓
 "RENAPRI" (truncated) → "renapri" → "renapril".includes("renapri") → [47] ✓
@@ -171,11 +172,11 @@ VerificationResult = {
 
 ### Status values
 
-| Status | Meaning | Badge Color |
-|---|---|---|
-| `pass` | All scheduled meds match | Green |
-| `fail` | Missing, extra, or unclear meds | Red |
-| `manual_check` | Identity/unknown meds need review | Amber |
+| Status         | Meaning                           | Badge Color |
+| -------------- | --------------------------------- | ----------- |
+| `pass`         | All scheduled meds match          | Green       |
+| `fail`         | Missing, extra, or unclear meds   | Red         |
+| `manual_check` | Identity/unknown meds need review | Amber       |
 
 ---
 
@@ -245,13 +246,13 @@ No user consent prompt — silent auto-call when user uploads prescription photo
 
 All data in `localStorage`. Key: `dose:plans` → `Plan[]` JSON.
 
-| Function | Purpose |
-|---|---|
-| `listPlans()` | Reads + migrates old field names (`schedules`→`doses`, strips `known`). Returns `Plan[]`. |
-| `getPlan(id)` | Finds one plan. |
-| `upsertPlan(plan)` | Creates or updates. |
-| `deletePlan(id)` | Removes from list. |
-| `generateId()` | `crypto.randomUUID()`. |
+| Function           | Purpose                                                                                   |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| `listPlans()`      | Reads + migrates old field names (`schedules`→`doses`, strips `known`). Returns `Plan[]`. |
+| `getPlan(id)`      | Finds one plan.                                                                           |
+| `upsertPlan(plan)` | Creates or updates.                                                                       |
+| `deletePlan(id)`   | Removes from list.                                                                        |
+| `generateId()`     | `crypto.randomUUID()`.                                                                    |
 
 ### Migration
 
@@ -284,7 +285,7 @@ dose/
 ├── app/
 │   ├── page.tsx           Home — plan list, create, delete, global verify button
 │   ├── layout.tsx         Root HTML, fonts (light-only, no theme provider)
-│   ├── treatment/[id]/
+│   ├── plan/[id]/
 │   │   └── page.tsx       Medication management (OCR + manual add, edit, delete)
 │   ├── verify/
 │   │   ├── page.tsx       Global tray capture, meal timing
@@ -357,19 +358,19 @@ Plans are small JSON arrays. `migrateMed()` handles field renames on read. Simpl
 
 ## Edge Cases
 
-| Case | Behavior |
-|---|---|
-| No sessions on a drug | Identity-only check. "Có trong khay ✓" or "Không tìm thấy ✗". |
-| Drug not in YOLO model | Amber warning box. "Thuốc chưa có trong model, sẽ cần kiểm tra thủ công". |
-| Pills detected with confidence < 0.65 | `"unclear"` status. Amber warning. "Vui lòng chụp lại". |
-| Empty tray (0 detections) | All expected → missing. Normal FAIL. |
-| Pill in tray but wrong session | `"extra"` — shows as detected but unexpected. |
-| Old localStorage data | `migrateMed()` converts `schedules`→`doses`, drops `known`. |
-| OCR reads "RENAPRI" (truncated) | `findDrug` substring match → "renapril" → class 47 ✓ |
-| Multiple drugs in prescription | OCR parses all. User selects which to save. |
-| Manual entry with catalog match | Autocomplete dropdown → pick → classId auto-set. |
-| No `GROQ_API_KEY` in `.env` | LLM fallback returns empty. Shows "nhập thủ công" prompt. |
-| OCR/LLM failure | Amber error message: "Không đọc được đơn thuốc, vui lòng nhập tay". |
+| Case                                  | Behavior                                                                  |
+| ------------------------------------- | ------------------------------------------------------------------------- |
+| No sessions on a drug                 | Identity-only check. "Có trong khay ✓" or "Không tìm thấy ✗".             |
+| Drug not in YOLO model                | Amber warning box. "Thuốc chưa có trong model, sẽ cần kiểm tra thủ công". |
+| Pills detected with confidence < 0.65 | `"unclear"` status. Amber warning. "Vui lòng chụp lại".                   |
+| Empty tray (0 detections)             | All expected → missing. Normal FAIL.                                      |
+| Pill in tray but wrong session        | `"extra"` — shows as detected but unexpected.                             |
+| Old localStorage data                 | `migrateMed()` converts `schedules`→`doses`, drops `known`.               |
+| OCR reads "RENAPRI" (truncated)       | `findDrug` substring match → "renapril" → class 47 ✓                      |
+| Multiple drugs in prescription        | OCR parses all. User selects which to save.                               |
+| Manual entry with catalog match       | Autocomplete dropdown → pick → classId auto-set.                          |
+| No `GROQ_API_KEY` in `.env`           | LLM fallback returns empty. Shows "nhập thủ công" prompt.                 |
+| OCR/LLM failure                       | Amber error message: "Không đọc được đơn thuốc, vui lòng nhập tay".       |
 
 ---
 

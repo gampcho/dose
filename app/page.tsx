@@ -2,37 +2,40 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   RiAddLine,
   RiMedicineBottleLine,
   RiArrowRightLine,
-  RiDeleteBinLine,
-  RiCapsuleLine,
   RiFileListLine,
-  RiSettings3Line,
   RiScanLine,
   RiSunLine,
   RiSunFoggyLine,
   RiMoonLine,
   RiMoonFoggyLine,
   RiTimeLine,
+  RiQuestionLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { listPlans, upsertPlan, deletePlan, generateId } from "@/lib/storage"
+import { listPlans, upsertPlan, generateId } from "@/lib/storage"
+import { PlanCard } from "@/components/common/plan-card"
 import type { Plan } from "@/lib/types"
 
 export default function HomePage() {
+  const router = useRouter()
   const [plans, setPlans] = React.useState<Plan[]>([])
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
+    if (!localStorage.getItem("dose:onboarding_seen")) {
+      router.push("/guideline")
+      return
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from localStorage on mount
     setPlans(listPlans())
     setMounted(true)
-  }, [])
+  }, [router])
 
   function handleCreate() {
     const all = listPlans()
@@ -43,12 +46,6 @@ export default function HomePage() {
       createdAt: new Date().toISOString(),
     }
     upsertPlan(plan)
-    setPlans(listPlans())
-  }
-
-  function handleDelete(id: string, e: React.MouseEvent) {
-    e.preventDefault()
-    deletePlan(id)
     setPlans(listPlans())
   }
 
@@ -70,16 +67,18 @@ export default function HomePage() {
     return RiMoonLine
   })()
 
-  const today = now?.toLocaleDateString("vi-VN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }) ?? ""
-  const time = now?.toLocaleTimeString("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }) ?? ""
+  const today =
+    now?.toLocaleDateString("vi-VN", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }) ?? ""
+  const time =
+    now?.toLocaleTimeString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }) ?? ""
 
   if (!mounted) {
     return (
@@ -90,7 +89,9 @@ export default function HomePage() {
               <div className="flex size-8 items-center justify-center rounded-xl bg-primary">
                 <RiMedicineBottleLine className="size-4 text-primary-foreground" />
               </div>
-              <span className="font-heading text-lg font-semibold tracking-tight">DOSE</span>
+              <span className="font-heading text-lg font-semibold tracking-tight">
+                DOSE
+              </span>
             </div>
           </div>
         </header>
@@ -106,38 +107,24 @@ export default function HomePage() {
             <div className="flex size-8 items-center justify-center rounded-xl bg-primary">
               <RiMedicineBottleLine className="size-4 text-primary-foreground" />
             </div>
-            <span className="font-heading text-lg font-semibold tracking-tight">DOSE</span>
+            <span className="font-heading text-lg font-semibold tracking-tight">
+              DOSE
+            </span>
           </div>
+          <Link href="/guideline">
+            <Button variant="ghost" size="icon-sm">
+              <RiQuestionLine />
+            </Button>
+          </Link>
         </div>
       </header>
 
       <main className="mx-auto max-w-lg px-4 py-6">
-        <div className="mb-6">
+        <div className="mb-4">
           <p className="flex items-center gap-1.5 text-sm text-muted-foreground capitalize">
             <TimeIcon className="size-4 shrink-0" />
             {today} · {time}
           </p>
-          <h1 className="mt-0.5 font-heading text-2xl font-bold tracking-tight">
-            Đơn thuốc
-          </h1>
-        </div>
-
-        <div className="mb-6 flex flex-col gap-2">
-          <Link href="/verify" className="block">
-            <Button size="lg" className="w-full text-base">
-              <RiScanLine />
-              Kiểm tra khay thuốc hôm nay
-              <RiArrowRightLine />
-            </Button>
-          </Link>
-
-          <Link href="/now" className="block">
-            <Button variant="outline" size="lg" className="w-full text-base">
-              <RiTimeLine />
-              Thuốc cần uống ngay
-              <RiArrowRightLine />
-            </Button>
-          </Link>
         </div>
 
         {plans.length === 0 ? (
@@ -158,18 +145,35 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
+            <div className="mb-6 flex flex-col gap-2">
+              <Link href="/verify" className="block">
+                <Button size="lg" className="w-full text-base">
+                  <RiScanLine />
+                  Kiểm tra khay thuốc hôm nay
+                  <RiArrowRightLine />
+                </Button>
+              </Link>
+
+              <Link href="/now" className="block">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="w-full text-base"
+                >
+                  <RiTimeLine />
+                  Thuốc cần uống ngay
+                  <RiArrowRightLine />
+                </Button>
+              </Link>
+            </div>
+
             {plans.map((plan, idx) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                index={idx + 1}
-                onDelete={(e) => handleDelete(plan.id, e)}
-              />
+              <PlanCard key={plan.id} plan={plan} index={idx + 1} />
             ))}
 
             <button
               onClick={handleCreate}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
+              className="flex w-full items-center justify-center gap-2 rounded-full border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
             >
               <RiAddLine className="size-4" />
               Thêm đơn thuốc
@@ -178,66 +182,5 @@ export default function HomePage() {
         )}
       </main>
     </div>
-  )
-}
-
-function PlanCard({
-  plan,
-  index,
-  onDelete,
-}: {
-  plan: Plan
-  index: number
-  onDelete: (e: React.MouseEvent) => void
-}) {
-  const medCount = plan.medications.length
-
-  return (
-    <Card>
-      <CardContent className="flex items-center gap-4 py-4">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <span className="font-heading text-sm font-bold text-primary">{index}</span>
-        </div>
-
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <p className="font-medium leading-snug">{plan.name}</p>
-          <div className="flex items-center gap-2">
-            {medCount === 0 ? (
-              <span className="text-xs text-muted-foreground">Chưa có thuốc</span>
-            ) : (
-              <>
-                <RiCapsuleLine className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{medCount} loại thuốc</span>
-                <div className="flex flex-wrap gap-1">
-                  {plan.medications.map((med) => (
-                    <Badge key={med.id} variant="secondary" className="text-xs">
-                      {med.name}
-                    </Badge>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0 text-muted-foreground hover:text-destructive"
-          onClick={onDelete}
-        >
-          <RiDeleteBinLine />
-        </Button>
-      </CardContent>
-
-      <CardFooter className="gap-2">
-        <Link href={`/treatment/${plan.id}`} className="flex-1">
-          <Button variant="outline" size="sm" className="w-full">
-            <RiSettings3Line />
-            Quản lý thuốc
-          </Button>
-        </Link>
-      </CardFooter>
-    </Card>
   )
 }

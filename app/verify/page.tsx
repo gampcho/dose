@@ -78,7 +78,11 @@ export default function GlobalVerifyPage() {
     <div className="flex min-h-svh flex-col bg-background">
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-3">
-          <Button variant="ghost" size="icon-sm" onClick={() => router.push("/")}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => router.push("/")}
+          >
             <RiArrowLeftLine />
           </Button>
           <div>
@@ -139,11 +143,17 @@ export default function GlobalVerifyPage() {
                 <RiArrowRightLine />
               </Button>
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => cameraInputRef.current?.click()}>
+                <Button
+                  variant="outline"
+                  onClick={() => cameraInputRef.current?.click()}
+                >
                   <RiRefreshLine />
                   Chụp lại
                 </Button>
-                <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                <Button
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   <RiImageAddLine />
                   Đổi ảnh
                 </Button>
@@ -153,7 +163,9 @@ export default function GlobalVerifyPage() {
         ) : (
           <div className="flex flex-1 flex-col justify-center gap-6">
             <div className="flex flex-col gap-1 text-center">
-              <p className="font-heading text-lg font-semibold">Chụp ảnh khay thuốc</p>
+              <p className="font-heading text-lg font-semibold">
+                Chụp ảnh khay thuốc
+              </p>
               <p className="text-sm text-muted-foreground">
                 Kiểm tra tất cả thuốc từ {planCount} đơn thuốc
               </p>
@@ -170,7 +182,9 @@ export default function GlobalVerifyPage() {
                 </div>
                 <div className="flex flex-col items-center gap-0.5">
                   <span className="text-sm font-semibold">Camera</span>
-                  <span className="text-xs text-muted-foreground">Chụp trực tiếp</span>
+                  <span className="text-xs text-muted-foreground">
+                    Chụp trực tiếp
+                  </span>
                 </div>
               </button>
 
@@ -184,7 +198,9 @@ export default function GlobalVerifyPage() {
                 </div>
                 <div className="flex flex-col items-center gap-0.5">
                   <span className="text-sm font-semibold">Tải ảnh lên</span>
-                  <span className="text-xs text-muted-foreground">Từ thư viện</span>
+                  <span className="text-xs text-muted-foreground">
+                    Từ thư viện
+                  </span>
                 </div>
               </button>
             </div>
@@ -192,8 +208,21 @@ export default function GlobalVerifyPage() {
         )}
       </main>
 
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileChange}
+      />
     </div>
   )
 }

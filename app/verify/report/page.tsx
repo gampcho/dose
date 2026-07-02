@@ -101,7 +101,8 @@ export default function GlobalReportPage() {
           setResult(analysis)
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Lỗi không xác định")
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : "Lỗi không xác định")
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -112,7 +113,11 @@ export default function GlobalReportPage() {
   }, [imageUrl, router, session])
 
   const status = result?.status
-  const hasData = result && (result.results.length > 0 || result.unknownMeds.length > 0 || result.identityMeds.length > 0)
+  const hasData =
+    result &&
+    (result.results.length > 0 ||
+      result.unknownMeds.length > 0 ||
+      result.identityMeds.length > 0)
   const reviewItems = React.useMemo(
     () => [...feedbackItems, ...latestReviewItems(result)],
     [feedbackItems, result],
@@ -123,7 +128,11 @@ export default function GlobalReportPage() {
     if (result) speakVietnamese(buildReportSpeech(result))
   }
 
-  function handleFeedback(result: Result, feedback: FeedbackValue, correctionText?: string) {
+  function handleFeedback(
+    result: Result,
+    feedback: FeedbackValue,
+    correctionText?: string,
+  ) {
     addFeedback({
       resultClassId: result.classId,
       resultName: result.name,
@@ -139,7 +148,9 @@ export default function GlobalReportPage() {
 
   function exportReviewData() {
     const exported = buildFeedbackExport(reviewItems)
-    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" })
+    const blob = new Blob([JSON.stringify(exported, null, 2)], {
+      type: "application/json",
+    })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
@@ -153,7 +164,11 @@ export default function GlobalReportPage() {
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon-sm" onClick={() => router.push("/verify")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => router.push("/verify")}
+            >
               <RiArrowLeftLine />
             </Button>
             <div>
@@ -166,18 +181,30 @@ export default function GlobalReportPage() {
 
           {!loading && hasData && (
             <Badge
-              variant={status === "pass" ? "default" : status === "fail" ? "destructive" : "secondary"}
+              variant={
+                status === "pass"
+                  ? "default"
+                  : status === "fail"
+                    ? "destructive"
+                    : "secondary"
+              }
               className={cn(
                 "gap-1 px-3 py-1 text-sm font-bold",
-                status === "pass" && "bg-emerald-500 text-white hover:bg-emerald-500",
+                status === "pass" &&
+                  "bg-emerald-500 text-white hover:bg-emerald-500",
                 status === "fail" && "bg-red-500 text-white hover:bg-red-500",
-                status === "manual_check" && "bg-amber-500 text-white hover:bg-amber-500",
+                status === "manual_check" &&
+                  "bg-amber-500 text-white hover:bg-amber-500",
               )}
             >
               {status === "pass" && <RiCheckboxCircleFill className="size-4" />}
               {status === "fail" && <RiCloseCircleFill className="size-4" />}
               {status === "manual_check" && <RiAlertLine className="size-4" />}
-              {status === "pass" ? "PASS" : status === "fail" ? "FAIL" : "CẦN KIỂM TRA"}
+              {status === "pass"
+                ? "PASS"
+                : status === "fail"
+                  ? "FAIL"
+                  : "CẦN KIỂM TRA"}
             </Badge>
           )}
         </div>
@@ -187,7 +214,9 @@ export default function GlobalReportPage() {
         {loading && (
           <div className="flex flex-col items-center justify-center gap-4 py-16">
             <div className="size-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            <p className="text-sm text-muted-foreground">Đang phân tích khay thuốc...</p>
+            <p className="text-sm text-muted-foreground">
+              Đang phân tích khay thuốc...
+            </p>
           </div>
         )}
 
@@ -221,15 +250,30 @@ export default function GlobalReportPage() {
                   </div>
                 )}
 
-                <Button variant="outline" size="sm" className="w-full" onClick={() => router.push("/verify")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => router.push("/verify")}
+                >
                   <RiRefreshLine />
                   Chụp lại
                 </Button>
-                <Button variant="outline" size="sm" className="w-full" onClick={speakResult}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={speakResult}
+                >
                   <RiVolumeUpLine />
                   Nghe kết quả
                 </Button>
-                <Button variant="outline" size="sm" className="w-full" onClick={() => router.push("/")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => router.push("/")}
+                >
                   Về trang chủ
                 </Button>
               </div>
@@ -241,7 +285,11 @@ export default function GlobalReportPage() {
 
                 <div className="flex flex-col gap-2">
                   {result!.results.map((r) => (
-                    <ResultRow key={r.classId} result={r} onFeedback={handleFeedback} />
+                    <ResultRow
+                      key={r.classId}
+                      result={r}
+                      onFeedback={handleFeedback}
+                    />
                   ))}
                 </div>
 
@@ -261,11 +309,15 @@ export default function GlobalReportPage() {
                     </div>
                     <div className="mt-2 flex flex-col gap-1">
                       {result!.identityMeds.map((item) => (
-                        <p key={item.med.id} className="text-xs text-blue-700 dark:text-blue-400">
-                          {item.present ? "✓" : "✗"}{" "}
-                          {item.med.name}
+                        <p
+                          key={item.med.id}
+                          className="text-xs text-blue-700 dark:text-blue-400"
+                        >
+                          {item.present ? "✓" : "✗"} {item.med.name}
                           {item.name !== item.med.name ? ` → ${item.name}` : ""}
-                          {item.present ? ", có trong khay" : ", không tìm thấy"}
+                          {item.present
+                            ? ", có trong khay"
+                            : ", không tìm thấy"}
                         </p>
                       ))}
                     </div>
@@ -282,10 +334,17 @@ export default function GlobalReportPage() {
                     </div>
                     <div className="mt-2 flex flex-col gap-1">
                       {result!.unknownMeds.map((med) => {
-                        const total = med.doses.reduce((s, sc) => s + sc.pillCount, 0)
+                        const total = med.doses.reduce(
+                          (s, sc) => s + sc.pillCount,
+                          0,
+                        )
                         return (
-                          <p key={med.id} className="text-xs text-amber-700 dark:text-amber-400">
-                            {med.name}: kỳ vọng {med.expected ?? total} {med.unit}
+                          <p
+                            key={med.id}
+                            className="text-xs text-amber-700 dark:text-amber-400"
+                          >
+                            {med.name}: kỳ vọng {med.expected ?? total}{" "}
+                            {med.unit}
                           </p>
                         )
                       })}
@@ -301,37 +360,65 @@ export default function GlobalReportPage() {
                 <div className="rounded-xl border bg-card px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold">Dữ liệu review model</p>
+                      <p className="text-sm font-semibold">
+                        Dữ liệu review model
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        {reviewCount} mục cần kiểm tra hoặc đã được người dùng phản hồi
+                        {reviewCount} mục cần kiểm tra hoặc đã được người dùng
+                        phản hồi
                       </p>
                     </div>
-                    <Button variant="outline" size="sm" onClick={exportReviewData} disabled={reviewItems.length === 0}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={exportReviewData}
+                      disabled={reviewItems.length === 0}
+                    >
                       <RiDownloadLine />
                       Xuất JSON
                     </Button>
                   </div>
                   {result!.results.some((r) => r.status === "unclear") && (
                     <p className="mt-2 text-xs text-amber-600">
-                      Có kết quả chưa rõ, nên đưa vào tập review trước khi cập nhật model.
+                      Có kết quả chưa rõ, nên đưa vào tập review trước khi cập
+                      nhật model.
                     </p>
                   )}
                 </div>
 
                 <div className="flex gap-4 rounded-xl bg-muted/40 px-4 py-3 text-sm">
                   <div className="flex flex-1 flex-col items-center gap-0.5">
-                    <span className="text-xl font-bold text-emerald-500">{result!.results.filter((r) => r.status === "correct").length}</span>
+                    <span className="text-xl font-bold text-emerald-500">
+                      {
+                        result!.results.filter((r) => r.status === "correct")
+                          .length
+                      }
+                    </span>
                     <span className="text-xs text-muted-foreground">Đúng</span>
                   </div>
                   <div className="w-px bg-border" />
                   <div className="flex flex-1 flex-col items-center gap-0.5">
-                    <span className="text-xl font-bold text-amber-500">{result!.results.filter((r) => r.status === "extra").length}</span>
-                    <span className="text-xs text-muted-foreground">Ngoài đơn</span>
+                    <span className="text-xl font-bold text-amber-500">
+                      {
+                        result!.results.filter((r) => r.status === "extra")
+                          .length
+                      }
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Ngoài đơn
+                    </span>
                   </div>
                   <div className="w-px bg-border" />
                   <div className="flex flex-1 flex-col items-center gap-0.5">
-                    <span className="text-xl font-bold text-red-500">{result!.results.filter((r) => r.status === "missing").length}</span>
-                    <span className="text-xs text-muted-foreground">Sai lệch</span>
+                    <span className="text-xl font-bold text-red-500">
+                      {
+                        result!.results.filter((r) => r.status === "missing")
+                          .length
+                      }
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Sai lệch
+                    </span>
                   </div>
                 </div>
               </div>
@@ -383,28 +470,49 @@ function latestReviewItems(result: VerificationResult | null): FeedbackItem[] {
   return [...unclear, ...unknown]
 }
 
-function StatusBanner({ status, result }: { status: VerificationResult["status"]; result: VerificationResult }) {
-  const missingCount = result.results.filter((r) => r.status === "missing").length
+function StatusBanner({
+  status,
+  result,
+}: {
+  status: VerificationResult["status"]
+  result: VerificationResult
+}) {
+  const missingCount = result.results.filter(
+    (r) => r.status === "missing",
+  ).length
   const extraCount = result.results.filter((r) => r.status === "extra").length
-  const unclearCount = result.results.filter((r) => r.status === "unclear").length
+  const unclearCount = result.results.filter(
+    (r) => r.status === "unclear",
+  ).length
   const failCount = missingCount + extraCount + unclearCount
 
   return (
     <div
       className={cn(
         "mb-6 flex items-center gap-3 rounded-xl px-4 py-3",
-        status === "pass" && "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-        status === "fail" && "bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300",
-        status === "manual_check" && "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+        status === "pass" &&
+          "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+        status === "fail" &&
+          "bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300",
+        status === "manual_check" &&
+          "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
       )}
     >
-      {status === "pass" && <RiCheckboxCircleFill className="size-5 shrink-0 text-emerald-500" />}
-      {status === "fail" && <RiCloseCircleFill className="size-5 shrink-0 text-red-500" />}
-      {status === "manual_check" && <RiAlertLine className="size-5 shrink-0 text-amber-500" />}
+      {status === "pass" && (
+        <RiCheckboxCircleFill className="size-5 shrink-0 text-emerald-500" />
+      )}
+      {status === "fail" && (
+        <RiCloseCircleFill className="size-5 shrink-0 text-red-500" />
+      )}
+      {status === "manual_check" && (
+        <RiAlertLine className="size-5 shrink-0 text-amber-500" />
+      )}
       <div>
         <p className="text-sm font-semibold">
-          {status === "pass" && "Không phát hiện sai lệch, khay thuốc khớp với tất cả đơn thuốc"}
-          {status === "fail" && `Phát hiện ${failCount} sai lệch, cần kiểm tra lại`}
+          {status === "pass" &&
+            "Không phát hiện sai lệch, khay thuốc khớp với tất cả đơn thuốc"}
+          {status === "fail" &&
+            `Phát hiện ${failCount} sai lệch, cần kiểm tra lại`}
           {status === "manual_check" && "Thuốc cần kiểm tra thủ công"}
         </p>
       </div>

@@ -28,13 +28,17 @@ export function listFeedback(): FeedbackItem[] {
   if (typeof window === "undefined") return []
 
   try {
-    return normalizeFeedbackItems(JSON.parse(localStorage.getItem(FEEDBACK_KEY) ?? "[]"))
+    return normalizeFeedbackItems(
+      JSON.parse(localStorage.getItem(FEEDBACK_KEY) ?? "[]"),
+    )
   } catch {
     return []
   }
 }
 
-export function addFeedback(input: Omit<FeedbackItem, "id" | "createdAt">): FeedbackItem {
+export function addFeedback(
+  input: Omit<FeedbackItem, "id" | "createdAt">,
+): FeedbackItem {
   const item: FeedbackItem = {
     ...input,
     id: crypto.randomUUID(),
@@ -49,7 +53,9 @@ export function normalizeFeedbackItems(raw: unknown): FeedbackItem[] {
   return raw.filter(isFeedbackItem)
 }
 
-export function buildFeedbackExport(items: FeedbackItem[] = listFeedback()): FeedbackExport {
+export function buildFeedbackExport(
+  items: FeedbackItem[] = listFeedback(),
+): FeedbackExport {
   return {
     source: "dose",
     kind: "training_review",

@@ -1,7 +1,14 @@
+.github/
+.next/
+.wrangler/
+.turbo/
+.pnpm-store/
 dist/
 node_modules/
-.next/
-.turbo/
 coverage/
 pnpm-lock.yaml
-.pnpm-store/
+public/
+demo/
+*.jsonc
+*.lock
+*.md

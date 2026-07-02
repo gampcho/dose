@@ -65,7 +65,9 @@ export function verify(
     if (med.doses.length === 0) {
       const match = matchMedication(med)
       const classIds = match.classIds
-      const present = classIds.length > 0 && detections.some((d) => classIds.includes(d.classId))
+      const present =
+        classIds.length > 0 &&
+        detections.some((d) => classIds.includes(d.classId))
       identity.push({ med, present, name: match.matchedName })
       if (classIds.length > 0) identityClassIds.push(...classIds)
       continue
@@ -115,7 +117,9 @@ function currentDoseCount(
   mealTiming: MealTiming,
 ): number {
   return med.doses
-    .filter((dose) => matchesVerificationTime(med, dose.session, session, mealTiming))
+    .filter((dose) =>
+      matchesVerificationTime(med, dose.session, session, mealTiming),
+    )
     .reduce((total, dose) => total + dose.pillCount, 0)
 }
 
@@ -151,7 +155,9 @@ function addExpectedGroup(
   })
 }
 
-function summarizeDetections(detections: Detection[]): Map<number, DetectionSummary> {
+function summarizeDetections(
+  detections: Detection[],
+): Map<number, DetectionSummary> {
   const detected = new Map<number, DetectionSummary>()
   for (const detection of detections) {
     const prev = detected.get(detection.classId)
@@ -186,7 +192,9 @@ function compareExpectedGroup(
     0,
   )
   const confidence = Math.max(
-    ...group.classIds.map((classId) => remainingDetections.get(classId)?.confidence ?? 0),
+    ...group.classIds.map(
+      (classId) => remainingDetections.get(classId)?.confidence ?? 0,
+    ),
   )
 
   for (const classId of group.classIds) {
@@ -207,15 +215,17 @@ function compareExpectedGroup(
 function extraResults(
   remainingDetections: Map<number, DetectionSummary>,
 ): Result[] {
-  return Array.from(remainingDetections.entries()).map(([classId, detection]) => ({
-    classId,
-    name: getClassName(classId),
-    expected: 0,
-    detected: detection.count,
-    confidence: detection.confidence,
-    unit: "viên",
-    status: "extra",
-  }))
+  return Array.from(remainingDetections.entries()).map(
+    ([classId, detection]) => ({
+      classId,
+      name: getClassName(classId),
+      expected: 0,
+      detected: detection.count,
+      confidence: detection.confidence,
+      unit: "viên",
+      status: "extra",
+    }),
+  )
 }
 
 function getStatus(
@@ -234,14 +244,16 @@ function computeStatus(
   identityMeds: IdentityMed[],
   unknownMeds: Medication[],
 ): OverallStatus {
-  const hasScheduledFail = results.some((result) =>
-    result.status === "missing" ||
-    result.status === "extra" ||
-    result.status === "unclear",
+  const hasScheduledFail = results.some(
+    (result) =>
+      result.status === "missing" ||
+      result.status === "extra" ||
+      result.status === "unclear",
   )
   if (hasScheduledFail) return "fail"
 
-  const hasManualCheck = identityMeds.some((med) => !med.present) || unknownMeds.length > 0
+  const hasManualCheck =
+    identityMeds.some((med) => !med.present) || unknownMeds.length > 0
   if (hasManualCheck) return "manual_check"
 
   return "pass"

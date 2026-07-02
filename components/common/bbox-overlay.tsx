@@ -84,10 +84,15 @@ export function BBoxOverlay({
   return (
     <div className={className}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="Khay thuốc" className="w-full bg-muted/30 object-contain" style={{ maxHeight: 380 }} />
+      <img
+        src={src}
+        alt="Khay thuốc"
+        className="w-full bg-muted/30 object-contain"
+        style={{ maxHeight: 380 }}
+      />
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 h-full w-full object-contain pointer-events-none"
+        className="pointer-events-none absolute inset-0 h-full w-full object-contain"
       />
     </div>
   )

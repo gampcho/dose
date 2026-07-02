@@ -10,11 +10,14 @@ interface RawLlmMedicine {
   condition?: string
 }
 
-const DOMAIN_SESSIONS = new Set<Session>(["morning", "noon", "afternoon", "evening"])
+const DOMAIN_SESSIONS = new Set<Session>([
+  "morning",
+  "noon",
+  "afternoon",
+  "evening",
+])
 
-export async function parseWithLLM(
-  text: string,
-): Promise<ParsedMed[]> {
+export async function parseWithLLM(text: string): Promise<ParsedMed[]> {
   try {
     const res = await fetch("/api/parse", {
       method: "POST",
@@ -39,7 +42,9 @@ export function normalizeLlmMedicine(d: RawLlmMedicine): ParsedMed {
   const match = findDrug(d.name)
 
   const doses: Dose[] = (d.sessions ?? [])
-    .filter((s): s is { session: Session; pills: number } => DOMAIN_SESSIONS.has(s.session as Session))
+    .filter((s): s is { session: Session; pills: number } =>
+      DOMAIN_SESSIONS.has(s.session as Session),
+    )
     .map((s) => ({
       session: s.session,
       pillCount: s.pills,
@@ -54,8 +59,10 @@ export function normalizeLlmMedicine(d: RawLlmMedicine): ParsedMed {
     unit: d.unit ?? "viên",
     doses,
     mealTiming:
-      d.condition === "before_eat" ? "before" :
-      d.condition === "after_eat" ? "after" :
-      null,
+      d.condition === "before_eat"
+        ? "before"
+        : d.condition === "after_eat"
+          ? "after"
+          : null,
   }
 }

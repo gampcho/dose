@@ -18,9 +18,11 @@ async function getSession() {
   return session
 }
 
-function letterbox(
-  img: HTMLImageElement | HTMLCanvasElement,
-): { tensor: ort.Tensor; pad: { x: number; y: number }; scale: number } {
+function letterbox(img: HTMLImageElement | HTMLCanvasElement): {
+  tensor: ort.Tensor
+  pad: { x: number; y: number }
+  scale: number
+} {
   const w = img instanceof HTMLImageElement ? img.naturalWidth : img.width
   const h = img instanceof HTMLImageElement ? img.naturalHeight : img.height
   const scale = Math.min(INPUT_SIZE / w, INPUT_SIZE / h)

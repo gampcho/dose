@@ -16,7 +16,11 @@ export function ResultRow({
   onFeedback,
 }: {
   result: Result
-  onFeedback?: (result: Result, feedback: FeedbackValue, correctionText?: string) => void
+  onFeedback?: (
+    result: Result,
+    feedback: FeedbackValue,
+    correctionText?: string,
+  ) => void
 }) {
   const [correctionText, setCorrectionText] = React.useState("")
   const [showCorrection, setShowCorrection] = React.useState(false)
@@ -41,13 +45,13 @@ export function ResultRow({
       )}
     >
       <div className="mt-0.5 shrink-0">
-        {isCorrect && <RiCheckboxCircleFill className="size-5 text-emerald-500" />}
+        {isCorrect && (
+          <RiCheckboxCircleFill className="size-5 text-emerald-500" />
+        )}
         {(isMissing || isExtra) && (
           <RiCloseCircleFill className="size-5 text-red-500" />
         )}
-        {isUnclear && (
-          <RiCloseCircleFill className="size-5 text-amber-500" />
-        )}
+        {isUnclear && <RiCloseCircleFill className="size-5 text-amber-500" />}
       </div>
 
       <div className="flex flex-1 flex-col gap-1">
@@ -137,7 +141,11 @@ export function ResultRow({
                 <button
                   type="button"
                   onClick={() => {
-                    onFeedback(result, "incorrect", correctionText.trim() || undefined)
+                    onFeedback(
+                      result,
+                      "incorrect",
+                      correctionText.trim() || undefined,
+                    )
                     setCorrectionText("")
                     setShowCorrection(false)
                   }}
