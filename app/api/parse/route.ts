@@ -58,7 +58,15 @@ export async function POST(req: Request): Promise<NextResponse> {
   const content = data.choices?.[0]?.message?.content ?? "[]"
 
   const jsonMatch = content.match(/\[[\s\S]*\]/)
-  const raw = JSON.parse(jsonMatch?.[0] ?? "[]")
+  let raw: unknown
+  try {
+    raw = JSON.parse(jsonMatch?.[0] ?? "[]")
+  } catch {
+    return NextResponse.json(
+      { error: "LLM output was not valid JSON", raw: content },
+      { status: 422 },
+    )
+  }
 
   const result = Prescription.safeParse(raw)
   if (!result.success) {

@@ -38,8 +38,9 @@ describe("buildReportSpeech", () => {
     })
 
     expect(speech).toContain("Thiếu 1 viên paracetamol")
-    expect(speech).toContain("Có thuốc ngoài kế hoạch: atoris")
-    expect(speech).toContain("renapril chưa đủ rõ")
-    expect(speech).toContain("DIAMICRON cần kiểm tra thủ công")
+    expect(speech).toContain("Cần 2, hiện thấy 1")
+    expect(speech).toContain("Phát hiện 1 viên atoris ngoài kế hoạch")
+    expect(speech).toContain("renapril chưa đủ rõ để xác nhận")
+    expect(speech).toContain("DIAMICRON chưa có trong model")
   })
 })

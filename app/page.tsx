@@ -15,6 +15,7 @@ import {
   RiSunFoggyLine,
   RiMoonLine,
   RiMoonFoggyLine,
+  RiTimeLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
@@ -121,13 +122,23 @@ export default function HomePage() {
           </h1>
         </div>
 
-        <Link href="/verify" className="mb-6 block">
-          <Button size="lg" className="w-full text-base">
-            <RiScanLine />
-            Kiểm tra khay thuốc hôm nay
-            <RiArrowRightLine />
-          </Button>
-        </Link>
+        <div className="mb-6 flex flex-col gap-2">
+          <Link href="/verify" className="block">
+            <Button size="lg" className="w-full text-base">
+              <RiScanLine />
+              Kiểm tra khay thuốc hôm nay
+              <RiArrowRightLine />
+            </Button>
+          </Link>
+
+          <Link href="/now" className="block">
+            <Button variant="outline" size="lg" className="w-full text-base">
+              <RiTimeLine />
+              Thuốc cần uống ngay
+              <RiArrowRightLine />
+            </Button>
+          </Link>
+        </div>
 
         {plans.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-dashed py-16 text-center">

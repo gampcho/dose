@@ -108,6 +108,8 @@ export default function TreatmentDetailPage() {
     setImagePreview(url)
     setOcrLoading(true)
     setOcrError(null)
+    setOcrWarning(null)
+    setParsedMeds([])
 
     try {
       const img = new Image()
@@ -137,7 +139,8 @@ export default function TreatmentDetailPage() {
 
       setParsedMeds(parsed)
       fillFormWithMed(parsed[0])
-    } catch {
+    } catch (error) {
+      console.error("OCR failed", error)
       setOcrError("Không đọc được đơn thuốc, vui lòng nhập tay")
     } finally {
       setOcrLoading(false)

@@ -11,16 +11,16 @@ export const ConditionEnum = z.enum(["none", "before_eat", "after_eat"])
 
 export const SessionEntry = z.object({
   session: SessionEnum,
-  pills: z.number().positive(),
+  pills: z.number().nonnegative().default(0),
 })
 
 export const Medicine = z.object({
   name: z.string().min(1, "Medicine name is required"),
-  sessions: z.array(SessionEntry),
+  sessions: z.array(SessionEntry).default([]),
   dosage: z.string().optional(),
   unit: z.string().optional(),
-  quantity: z.number().positive(),
-  condition: ConditionEnum,
+  quantity: z.number().nonnegative().default(0),
+  condition: ConditionEnum.default("none"),
 })
 
 export const Prescription = z.array(Medicine)

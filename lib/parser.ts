@@ -3,7 +3,7 @@ import { findDrug } from "@/lib/catalog"
 
 interface RawLlmMedicine {
   name: string
-  quantity: number
+  quantity?: number
   sessions?: { session: string; pills: number }[]
   dosage?: string
   unit?: string

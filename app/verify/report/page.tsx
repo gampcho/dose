@@ -33,7 +33,8 @@ import {
   type FeedbackItem,
   type FeedbackValue,
 } from "@/lib/feedback"
-import type { Result } from "@/lib/types"
+import type { Result, Session } from "@/lib/types"
+import { speakVietnamese } from "@/lib/speech"
 
 const IMAGE_KEY = "dose:verify:global:image"
 const MEAL_KEY = "dose:verify:global:meal"
@@ -48,25 +49,30 @@ export default function GlobalReportPage() {
   const [detections, setDetections] = React.useState<Detection[]>([])
   const [feedbackItems, setFeedbackItems] = React.useState<FeedbackItem[]>([])
   const [feedbackMessage, setFeedbackMessage] = React.useState<string | null>(null)
+  const [session, setSession] = React.useState<Session | null>(null)
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- current session must come from the client timezone
+    setSession(getCurrentSession())
+
     const plans = listPlans()
     if (plans.length === 0) {
       router.push("/")
       return
     }
-    if (typeof window !== "undefined") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from sessionStorage on mount
-      setImageUrl(sessionStorage.getItem(IMAGE_KEY))
-      setFeedbackItems(listFeedback())
-    }
+    const savedImage = sessionStorage.getItem(IMAGE_KEY)
+    setImageUrl(savedImage)
+    setFeedbackItems(listFeedback())
+    if (!savedImage) setLoading(false)
   }, [router])
 
   React.useEffect(() => {
+    if (!imageUrl || !session) return
+    const activeSession = session
+
     const plans = listPlans()
-    if (plans.length === 0 || !imageUrl) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- no image means nothing to analyze
-      if (plans.length > 0) setLoading(false)
+    if (plans.length === 0) {
+      router.push("/")
       return
     }
 
@@ -74,6 +80,8 @@ export default function GlobalReportPage() {
 
     async function run() {
       try {
+        setLoading(true)
+        setError(null)
         await loadCatalog()
 
         const img = new Image()
@@ -86,9 +94,7 @@ export default function GlobalReportPage() {
 
         const { detect } = await import("@/lib/yolo")
         const dets = await detect(img)
-        const session = getCurrentSession()
-        const mt = (sessionStorage.getItem(MEAL_KEY) ?? null) as MealTiming
-        const analysis = verify(plans, dets, session, mt)
+        const analysis = verify(plans, dets, activeSession, readMealTiming())
 
         if (!cancelled) {
           setDetections(dets)
@@ -103,7 +109,7 @@ export default function GlobalReportPage() {
 
     run()
     return () => { cancelled = true }
-  }, [imageUrl])
+  }, [imageUrl, router, session])
 
   const status = result?.status
   const hasData = result && (result.results.length > 0 || result.unknownMeds.length > 0 || result.identityMeds.length > 0)
@@ -114,12 +120,7 @@ export default function GlobalReportPage() {
   const reviewCount = reviewItems.length
 
   function speakResult() {
-    if (!result || typeof window === "undefined" || !("speechSynthesis" in window)) return
-
-    const utterance = new SpeechSynthesisUtterance(buildReportSpeech(result))
-    utterance.lang = "vi-VN"
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(utterance)
+    if (result) speakVietnamese(buildReportSpeech(result))
   }
 
   function handleFeedback(result: Result, feedback: FeedbackValue, correctionText?: string) {
@@ -157,7 +158,9 @@ export default function GlobalReportPage() {
             </Button>
             <div>
               <p className="font-heading text-base leading-tight font-semibold">Kết quả kiểm tra</p>
-              <p className="text-xs text-muted-foreground">Buổi {SESSION_LABELS[getCurrentSession()]}</p>
+              <p className="text-xs text-muted-foreground">
+                {session ? `Buổi ${SESSION_LABELS[session]}` : "Đang xác định buổi uống"}
+              </p>
             </div>
           </div>
 
@@ -344,6 +347,11 @@ export default function GlobalReportPage() {
       </main>
     </div>
   )
+}
+
+function readMealTiming(): MealTiming {
+  const value = sessionStorage.getItem(MEAL_KEY)
+  return value === "before" || value === "after" ? value : null
 }
 
 function latestReviewItems(result: VerificationResult | null): FeedbackItem[] {
