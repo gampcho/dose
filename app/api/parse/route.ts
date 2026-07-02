@@ -24,7 +24,10 @@ Rules:
 export async function POST(req: Request): Promise<NextResponse> {
   const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) {
-    return NextResponse.json({ error: "GROQ_API_KEY not configured" }, { status: 500 })
+    return NextResponse.json(
+      { error: "GROQ_API_KEY not configured" },
+      { status: 500 },
+    )
   }
 
   const { text } = await req.json()
@@ -63,10 +66,16 @@ export async function POST(req: Request): Promise<NextResponse> {
   const result = Prescription.safeParse(raw)
   if (!result.success) {
     return NextResponse.json(
-      { error: "LLM output failed validation", details: result.error.issues, raw },
+      {
+        error: "LLM output failed validation",
+        details: result.error.issues,
+        raw,
+      },
       { status: 422 },
     )
   }
 
-  return NextResponse.json({ prescription: result.data satisfies MedicineType[] })
+  return NextResponse.json({
+    prescription: result.data satisfies MedicineType[],
+  })
 }

@@ -60,13 +60,13 @@ Medication errors among elderly patients in Vietnam are a silent crisis. Patient
 
 Test images are in [`public/demo/`](public/demo/). You can also try the [live demo](https://dose.lducc-work.workers.dev).
 
-| # | Scenario | Description | Result |
-|---|----------|-------------|--------|
-| 1 | Match | All pills in tray match the prescription | ✅ PASS |
-| 2 | Missing | Prescription requires a pill not found in tray | ❌ FAIL |
-| 3 | Extra | Tray contains a pill not listed in prescription | ❌ FAIL |
-| 4 | Wrong | Tray contains a different pill than prescribed | ❌ FAIL |
-| 5 | Unclear | Image is blurry or poorly lit — cannot verify | ⚠️ RETAKE |
+| #   | Scenario | Description                                     | Result    |
+| --- | -------- | ----------------------------------------------- | --------- |
+| 1   | Match    | All pills in tray match the prescription        | ✅ PASS   |
+| 2   | Missing  | Prescription requires a pill not found in tray  | ❌ FAIL   |
+| 3   | Extra    | Tray contains a pill not listed in prescription | ❌ FAIL   |
+| 4   | Wrong    | Tray contains a different pill than prescribed  | ❌ FAIL   |
+| 5   | Unclear  | Image is blurry or poorly lit — cannot verify   | ⚠️ RETAKE |
 
 ## Quick Start
 
@@ -101,14 +101,14 @@ bun run deploy
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Pill detection | YOLO12s (ONNX Runtime Web, WASM backend) |
-| Prescription OCR | PP-OCRv5 detection + Tesseract.js Vietnamese recognition |
-| Drug name matching | Levenshtein fuzzy matching against 108 drug classes |
-| Framework | Next.js 16 (App Router, Turbopack) |
-| Deployment | Cloudflare Pages (via OpenNext) |
-| Inference | 100% on-device — no data leaves the browser |
+| Layer              | Technology                                               |
+| ------------------ | -------------------------------------------------------- |
+| Pill detection     | YOLO12s (ONNX Runtime Web, WASM backend)                 |
+| Prescription OCR   | PP-OCRv5 detection + Tesseract.js Vietnamese recognition |
+| Drug name matching | Levenshtein fuzzy matching against 108 drug classes      |
+| Framework          | Next.js 16 (App Router, Turbopack)                       |
+| Deployment         | Cloudflare Pages (via OpenNext)                          |
+| Inference          | 100% on-device — no data leaves the browser              |
 
 ## Project Structure
 
@@ -116,7 +116,7 @@ bun run deploy
 dose/
 ├── app/                        # Next.js pages
 │   ├── page.tsx                # Home
-│   ├── treatment/[id]/         # Treatment plan management + OCR
+│   ├── plan/[id]/              # Plan management + OCR
 │   └── verification/[id]/      # Pill tray verification flow
 │       └── report/             # Evidence card results
 ├── lib/

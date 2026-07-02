@@ -69,16 +69,18 @@ export default function HomePage() {
     return RiMoonLine
   })()
 
-  const today = now?.toLocaleDateString("vi-VN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }) ?? ""
-  const time = now?.toLocaleTimeString("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }) ?? ""
+  const today =
+    now?.toLocaleDateString("vi-VN", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }) ?? ""
+  const time =
+    now?.toLocaleTimeString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }) ?? ""
 
   if (!mounted) {
     return (
@@ -89,7 +91,9 @@ export default function HomePage() {
               <div className="flex size-8 items-center justify-center rounded-xl bg-primary">
                 <RiMedicineBottleLine className="size-4 text-primary-foreground" />
               </div>
-              <span className="font-heading text-lg font-semibold tracking-tight">DOSE</span>
+              <span className="font-heading text-lg font-semibold tracking-tight">
+                DOSE
+              </span>
             </div>
           </div>
         </header>
@@ -105,7 +109,9 @@ export default function HomePage() {
             <div className="flex size-8 items-center justify-center rounded-xl bg-primary">
               <RiMedicineBottleLine className="size-4 text-primary-foreground" />
             </div>
-            <span className="font-heading text-lg font-semibold tracking-tight">DOSE</span>
+            <span className="font-heading text-lg font-semibold tracking-tight">
+              DOSE
+            </span>
           </div>
         </div>
       </header>
@@ -158,7 +164,7 @@ export default function HomePage() {
 
             <button
               onClick={handleCreate}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
+              className="flex w-full items-center justify-center gap-2 rounded-full border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
             >
               <RiAddLine className="size-4" />
               Thêm đơn thuốc
@@ -185,18 +191,24 @@ function PlanCard({
     <Card>
       <CardContent className="flex items-center gap-4 py-4">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <span className="font-heading text-sm font-bold text-primary">{index}</span>
+          <span className="font-heading text-sm font-bold text-primary">
+            {index}
+          </span>
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <p className="font-medium leading-snug">{plan.name}</p>
+          <p className="leading-snug font-medium">{plan.name}</p>
           <div className="flex items-center gap-2">
             {medCount === 0 ? (
-              <span className="text-xs text-muted-foreground">Chưa có thuốc</span>
+              <span className="text-xs text-muted-foreground">
+                Chưa có thuốc
+              </span>
             ) : (
               <>
                 <RiCapsuleLine className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{medCount} loại thuốc</span>
+                <span className="text-xs text-muted-foreground">
+                  {medCount} loại thuốc
+                </span>
                 <div className="flex flex-wrap gap-1">
                   {plan.medications.map((med) => (
                     <Badge key={med.id} variant="secondary" className="text-xs">
@@ -220,7 +232,7 @@ function PlanCard({
       </CardContent>
 
       <CardFooter className="gap-2">
-        <Link href={`/treatment/${plan.id}`} className="flex-1">
+        <Link href={`/plan/${plan.id}`} className="flex-1">
           <Button variant="outline" size="sm" className="w-full">
             <RiSettings3Line />
             Quản lý thuốc

@@ -34,9 +34,10 @@ function migrateMed(m: Record<string, unknown>) {
     id: String(m.id ?? ""),
     name: String(m.name ?? ""),
     classId: typeof m.classId === "number" ? m.classId : null,
-    doses: (m as { doses?: unknown; schedules?: unknown }).doses
-      ?? (m as { schedules?: unknown }).schedules
-      ?? [],
+    doses:
+      (m as { doses?: unknown; schedules?: unknown }).doses ??
+      (m as { schedules?: unknown }).schedules ??
+      [],
     mealTiming: m.mealTiming ?? null,
     unit: typeof m.unit === "string" ? m.unit : "viên",
     notes: String(m.notes ?? ""),

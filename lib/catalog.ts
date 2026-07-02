@@ -9,8 +9,8 @@ export async function loadCatalog(): Promise<void> {
     fetch("/models/drug_groups.json"),
   ])
 
-  const cn = await cnRes.json() as Record<string, string>
-  const dg = await dgRes.json() as Record<string, number[]>
+  const cn = (await cnRes.json()) as Record<string, string>
+  const dg = (await dgRes.json()) as Record<string, number[]>
 
   classNames = {}
   for (const [id, name] of Object.entries(cn)) {
@@ -27,7 +27,9 @@ export function getClassName(classId: number): string {
   return classNames?.[classId] ?? `class_${classId}`
 }
 
-export function searchDrugs(query: string): { name: string; classIds: number[] }[] {
+export function searchDrugs(
+  query: string,
+): { name: string; classIds: number[] }[] {
   if (!drugToIds || query.length < 2) return []
   const q = query.toLowerCase()
   const results: { name: string; classIds: number[] }[] = []

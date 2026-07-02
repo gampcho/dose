@@ -9,7 +9,9 @@ export function buildReportSpeech(result: VerificationResult): string {
       .filter((item) => !item.present)
       .map((item) => `${item.med.name} không tìm thấy trong khay.`),
     ...result.unknownMeds.map((med) => `${med.name} cần kiểm tra thủ công.`),
-  ].filter(Boolean).join(" ")
+  ]
+    .filter(Boolean)
+    .join(" ")
 }
 
 function statusSentence(status: VerificationResult["status"]): string {
@@ -20,7 +22,9 @@ function statusSentence(status: VerificationResult["status"]): string {
 
 function resultSentences(result: Result): string[] {
   if (result.status === "missing") {
-    return [`Thiếu ${result.expected - result.detected} ${result.unit} ${result.name}.`]
+    return [
+      `Thiếu ${result.expected - result.detected} ${result.unit} ${result.name}.`,
+    ]
   }
   if (result.status === "extra") {
     return [`Có thuốc ngoài kế hoạch: ${result.name}.`]

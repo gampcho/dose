@@ -21,16 +21,20 @@ describe("classifyOcrQuality", () => {
   })
 
   test("warns when average confidence is low", () => {
-    expect(classifyOcrQuality([
-      box("PARACETAMOL 500MG", 0.35),
-      box("Sáng 1 viên", 0.45),
-    ]).status).toBe("low_confidence")
+    expect(
+      classifyOcrQuality([
+        box("PARACETAMOL 500MG", 0.35),
+        box("Sáng 1 viên", 0.45),
+      ]).status,
+    ).toBe("low_confidence")
   })
 
   test("accepts readable OCR text", () => {
-    expect(classifyOcrQuality([
-      box("PARACETAMOL 500MG", 0.82),
-      box("Sáng 1 viên", 0.76),
-    ]).status).toBe("readable")
+    expect(
+      classifyOcrQuality([
+        box("PARACETAMOL 500MG", 0.82),
+        box("Sáng 1 viên", 0.76),
+      ]).status,
+    ).toBe("readable")
   })
 })

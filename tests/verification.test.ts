@@ -34,16 +34,27 @@ function detection(classId: number, confidence = 0.9): Detection {
   }
 }
 
-function run(medications: Medication[], detections: Detection[], session: Session = "morning") {
+function run(
+  medications: Medication[],
+  detections: Detection[],
+  session: Session = "morning",
+) {
   return verify([plan(medications)], detections, session, null)
 }
 
 describe("verify", () => {
   test("marks scheduled meds correct, missing, extra, and unclear", () => {
-    expect(run([med({ classId: 1 })], [detection(1)]).results[0].status).toBe("correct")
+    expect(run([med({ classId: 1 })], [detection(1)]).results[0].status).toBe(
+      "correct",
+    )
     expect(run([med({ classId: 1 })], []).results[0].status).toBe("missing")
-    expect(run([med({ classId: 1 })], [detection(1), detection(1)]).results[0].status).toBe("extra")
-    expect(run([med({ classId: 1 })], [detection(1, 0.4)]).results[0].status).toBe("unclear")
+    expect(
+      run([med({ classId: 1 })], [detection(1), detection(1)]).results[0]
+        .status,
+    ).toBe("extra")
+    expect(
+      run([med({ classId: 1 })], [detection(1, 0.4)]).results[0].status,
+    ).toBe("unclear")
   })
 
   test("presence-only meds do not also become extra detections", () => {
@@ -63,15 +74,18 @@ describe("verify", () => {
   })
 
   test("unknown scheduled meds expose active expected count only", () => {
-    const result = run([
-      med({
-        classId: null,
-        doses: [
-          { session: "morning", pillCount: 1 },
-          { session: "evening", pillCount: 3 },
-        ],
-      }),
-    ], [])
+    const result = run(
+      [
+        med({
+          classId: null,
+          doses: [
+            { session: "morning", pillCount: 1 },
+            { session: "evening", pillCount: 3 },
+          ],
+        }),
+      ],
+      [],
+    )
 
     expect(result.unknownMeds[0].expected).toBe(1)
   })
