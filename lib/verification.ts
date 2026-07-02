@@ -1,4 +1,9 @@
 import type { Plan, Medication, Result, Session, MealTiming } from "@/lib/types"
+import {
+  MIN_CLEAR_CONFIDENCE,
+  MIN_CLEAR_MARGIN,
+  OOD_CLASS_ID,
+} from "@/lib/yolo-safety"
 import type { Detection } from "@/lib/yolo"
 import { findDrug, getClassName } from "@/lib/catalog"
 
@@ -36,7 +41,17 @@ interface ExpectedGroup {
 interface DetectionSummary {
   count: number
   confidence: number
+  rawClassId?: number
+  rawConfidence?: number
+  secondClassId?: number
+  secondConfidence?: number
+  oodConfidence?: number
+  margin?: number
+  uncertain?: boolean
+  safetyReason?: Result["safetyReason"]
 }
+
+const VISUAL_LOOKALIKE_CLASS_IDS = new Set([10, 82])
 
 function mergeAllPlans(plans: Plan[]): Medication[] {
   const meds: Medication[] = []
@@ -130,7 +145,7 @@ function matchesVerificationTime(
   mealTiming: MealTiming,
 ): boolean {
   if (doseSession !== session) return false
-  if (!mealTiming || !med.mealTiming) return true
+  if (!mealTiming) return true
   return med.mealTiming === mealTiming
 }
 
@@ -163,15 +178,59 @@ function summarizeDetections(
     const prev = detected.get(detection.classId)
     if (prev) {
       prev.count++
-      prev.confidence = Math.max(prev.confidence, detection.confidence)
+      mergeDetectionSummary(prev, detection)
       continue
     }
     detected.set(detection.classId, {
       count: 1,
       confidence: detection.confidence,
+      rawClassId: detection.rawClassId,
+      rawConfidence: detection.rawConfidence,
+      secondClassId: detection.secondClassId,
+      secondConfidence: detection.secondConfidence,
+      oodConfidence: detection.oodConfidence,
+      margin: detection.margin,
+      uncertain: isUnsafeDetection(detection),
+      safetyReason: detectionSafetyReason(detection),
     })
   }
   return detected
+}
+
+function mergeDetectionSummary(
+  summary: DetectionSummary,
+  detection: Detection,
+): void {
+  if (detection.confidence <= summary.confidence) {
+    summary.uncertain = summary.uncertain || isUnsafeDetection(detection)
+    summary.safetyReason =
+      summary.safetyReason ?? detectionSafetyReason(detection)
+    return
+  }
+
+  summary.confidence = detection.confidence
+  summary.rawClassId = detection.rawClassId
+  summary.rawConfidence = detection.rawConfidence
+  summary.secondClassId = detection.secondClassId
+  summary.secondConfidence = detection.secondConfidence
+  summary.oodConfidence = detection.oodConfidence
+  summary.margin = detection.margin
+  summary.uncertain = summary.uncertain || isUnsafeDetection(detection)
+  summary.safetyReason = detectionSafetyReason(detection)
+}
+
+function isUnsafeDetection(detection: Detection): boolean {
+  return Boolean(detection.uncertain) || isVisualLookalike(detection.classId)
+}
+
+function detectionSafetyReason(detection: Detection): Result["safetyReason"] {
+  if (detection.safetyReason) return detection.safetyReason
+  if (isVisualLookalike(detection.classId)) return "visual_lookalike"
+  if (detection.confidence < MIN_CLEAR_CONFIDENCE) return "low_confidence"
+  if ((detection.margin ?? Number.POSITIVE_INFINITY) < MIN_CLEAR_MARGIN) {
+    return "weak_margin"
+  }
+  return undefined
 }
 
 function consumeIdentityDetections(
@@ -191,11 +250,8 @@ function compareExpectedGroup(
     (total, classId) => total + (remainingDetections.get(classId)?.count ?? 0),
     0,
   )
-  const confidence = Math.max(
-    ...group.classIds.map(
-      (classId) => remainingDetections.get(classId)?.confidence ?? 0,
-    ),
-  )
+  const summary = bestSummary(group.classIds, remainingDetections)
+  const confidence = summary?.confidence ?? 0
 
   for (const classId of group.classIds) {
     remainingDetections.delete(classId)
@@ -208,7 +264,8 @@ function compareExpectedGroup(
     detected,
     confidence,
     unit: group.unit,
-    status: getStatus(group.expected, detected, confidence),
+    status: getStatus(group.expected, detected, confidence, summary?.uncertain),
+    ...resultReviewFields(summary),
   }
 }
 
@@ -218,12 +275,14 @@ function extraResults(
   return Array.from(remainingDetections.entries()).map(
     ([classId, detection]) => ({
       classId,
-      name: getClassName(classId),
+      name: "Thuốc ngoài đơn / chưa xác định",
+      modelName: modelSuggestionName(detection, classId),
       expected: 0,
       detected: detection.count,
       confidence: detection.confidence,
       unit: "viên",
       status: "extra",
+      ...resultReviewFields(detection),
     }),
   )
 }
@@ -232,11 +291,56 @@ function getStatus(
   expected: number,
   detected: number,
   confidence: number,
+  uncertain = false,
 ): Result["status"] {
-  if (detected > 0 && confidence < 0.65) return "unclear"
+  if (detected > 0 && confidence < MIN_CLEAR_CONFIDENCE) return "unclear"
+  if (detected > 0 && uncertain) return "unclear"
   if (detected < expected) return "missing"
   if (detected > expected) return "extra"
   return "correct"
+}
+
+function bestSummary(
+  classIds: number[],
+  remainingDetections: Map<number, DetectionSummary>,
+): DetectionSummary | undefined {
+  return classIds
+    .map((classId) => remainingDetections.get(classId))
+    .filter((item): item is DetectionSummary => Boolean(item))
+    .sort((a, b) => b.confidence - a.confidence)[0]
+}
+
+function resultReviewFields(
+  summary: DetectionSummary | undefined,
+): Partial<Result> {
+  if (!summary) return {}
+
+  return {
+    rawClassId: summary.rawClassId,
+    rawModelName:
+      summary.rawClassId !== undefined ? getClassName(summary.rawClassId) : undefined,
+    secondClassId: summary.secondClassId,
+    secondModelName:
+      summary.secondClassId !== undefined
+        ? getClassName(summary.secondClassId)
+        : undefined,
+    oodConfidence: summary.oodConfidence,
+    margin: summary.margin,
+    safetyReason: summary.safetyReason,
+  }
+}
+
+function modelSuggestionName(
+  summary: DetectionSummary,
+  classId: number,
+): string | undefined {
+  const rawClassId = summary.rawClassId ?? classId
+  if (rawClassId === OOD_CLASS_ID) return undefined
+  return getClassName(rawClassId)
+}
+
+function isVisualLookalike(classId: number): boolean {
+  return VISUAL_LOOKALIKE_CLASS_IDS.has(classId)
 }
 
 function computeStatus(

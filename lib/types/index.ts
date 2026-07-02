@@ -46,6 +46,14 @@ export interface ParsedMed {
 export interface Result {
   classId: number
   name: string
+  modelName?: string
+  rawClassId?: number
+  rawModelName?: string
+  secondClassId?: number
+  secondModelName?: string
+  oodConfidence?: number
+  margin?: number
+  safetyReason?: "low_confidence" | "weak_margin" | "ood_competitive" | "visual_lookalike"
   expected: number
   detected: number
   confidence: number

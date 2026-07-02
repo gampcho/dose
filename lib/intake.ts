@@ -57,7 +57,7 @@ function currentPillCount(
 ): number {
   return med.doses
     .filter((dose) => dose.session === session)
-    .filter(() => !mealTiming || !med.mealTiming || med.mealTiming === mealTiming)
+    .filter(() => !mealTiming || med.mealTiming === mealTiming)
     .reduce((sum, dose) => sum + dose.pillCount, 0)
 }
 

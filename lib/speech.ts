@@ -15,6 +15,11 @@ export function speakVietnamese(text: string): boolean {
   return true
 }
 
+export function stopSpeech(): void {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return
+  window.speechSynthesis.cancel()
+}
+
 function pickVietnameseVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
   return voices.find((voice) => voice.lang.toLowerCase().startsWith("vi"))
     ?? voices.find((voice) => /viet|việt|vietnam/i.test(voice.name))

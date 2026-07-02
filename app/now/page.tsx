@@ -22,7 +22,7 @@ import type { MealTiming, Plan, Session } from "@/lib/types"
 import { speakVietnamese } from "@/lib/speech"
 
 const MEAL_OPTIONS: { value: MealTiming; label: string }[] = [
-  { value: null, label: "Tất cả" },
+  { value: null, label: "Theo tất cả" },
   { value: "before", label: "Trước ăn" },
   { value: "after", label: "Sau ăn" },
 ]
@@ -62,7 +62,7 @@ export default function NowPage() {
               <RiArrowLeftLine />
             </Button>
             <div className="min-w-0">
-              <p className="font-heading text-base leading-tight font-semibold">Thuốc cần uống</p>
+              <p className="font-heading text-base leading-tight font-semibold">Lịch uống theo buổi</p>
               <p className="text-xs text-muted-foreground">
                 {session ? `Buổi ${SESSION_LABELS[session]}` : "Đang xác định buổi uống"}
               </p>
@@ -205,5 +205,5 @@ function SessionIcon({ className }: { className?: string }) {
 function mealLabel(mealTiming: MealTiming): string {
   if (mealTiming === "before") return "Trước ăn"
   if (mealTiming === "after") return "Sau ăn"
-  return "Tất cả"
+  return "Theo tất cả"
 }

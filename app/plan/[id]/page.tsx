@@ -14,6 +14,7 @@ import {
   RiCheckLine,
 } from "@remixicon/react"
 
+import { QuickTourOverlay } from "@/components/common/quick-tour-overlay"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -25,9 +26,13 @@ import {
 } from "@/components/ui/dialog"
 import { MedicationCard } from "@/components/common/medication-card"
 import { SessionRow } from "@/components/common/session-row"
+import {
+  clearPendingPlanTour,
+  readPendingPlanTour,
+} from "@/lib/onboarding"
 import { getPlan, upsertPlan, generateId } from "@/lib/storage"
 import { ocr, preloadOcr } from "@/lib/ocr"
-import { parseWithLLM } from "@/lib/parser"
+import { parsePrescription } from "@/lib/parser"
 import { loadCatalog, searchDrugs } from "@/lib/catalog"
 import { classifyOcrQuality } from "@/lib/ocr-quality"
 import { SESSION_LABELS } from "@/lib/types"
@@ -118,8 +123,12 @@ export default function PlanDetailPage() {
   }, [loaded])
 
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [showAddTour, setShowAddTour] = React.useState(false)
+  const [addTourIndex, setAddTourIndex] = React.useState(0)
+  const [addTourRect, setAddTourRect] = React.useState<DOMRect | null>(null)
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
   const [ocrLoading, setOcrLoading] = React.useState(false)
+  const [cloudParsing, setCloudParsing] = React.useState(false)
   const [ocrError, setOcrError] = React.useState<string | null>(null)
   const [ocrWarning, setOcrWarning] = React.useState<string | null>(null)
 
@@ -141,11 +150,26 @@ export default function PlanDetailPage() {
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const cameraInputRef = React.useRef<HTMLInputElement>(null)
+  const imageEntryRef = React.useRef<HTMLDivElement>(null)
+  const manualEntryRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!loaded) return
+    if (readPendingPlanTour() !== planId) return
+    openAddDialog()
+  }, [loaded, planId])
+
+  React.useEffect(() => {
+    if (!dialogOpen) return
+    if (readPendingPlanTour() !== planId) return
+    setShowAddTour(true)
+  }, [dialogOpen, planId])
 
   async function handleOcr(file: File) {
     const url = URL.createObjectURL(file)
     setImagePreview(url)
     setOcrLoading(true)
+    setCloudParsing(false)
     setOcrError(null)
     setOcrWarning(null)
     setParsedMeds([])
@@ -166,12 +190,10 @@ export default function PlanDetailPage() {
         return
       }
 
-      setOcrWarning(
-        quality.status === "low_confidence" ? quality.message : null,
-      )
-
+      setOcrWarning(quality.status === "low_confidence" ? quality.message : null)
+      setCloudParsing(true)
       await loadCatalog()
-      const parsed = await parseWithLLM(quality.text)
+      const parsed = await parsePrescription(quality.text, "groq")
 
       if (parsed.length === 0) {
         setOcrError("Không nhận diện được thuốc, vui lòng nhập tay")
@@ -185,6 +207,7 @@ export default function PlanDetailPage() {
       setOcrError("Không đọc được đơn thuốc, vui lòng nhập tay")
     } finally {
       setOcrLoading(false)
+      setCloudParsing(false)
     }
   }
 
@@ -232,6 +255,72 @@ export default function PlanDetailPage() {
     setParsedMeds([])
     setOcrError(null)
     setOcrWarning(null)
+    setCloudParsing(false)
+  }
+
+  function openAddDialog() {
+    resetForm()
+    void loadCatalog()
+    setDialogOpen(true)
+  }
+
+  const addTourSteps = React.useMemo(
+    () => [
+      {
+        title: "Thêm thuốc từ ảnh đơn thuốc",
+        description:
+          "Dùng ảnh có sẵn hoặc chụp trực tiếp để app đọc đơn, gợi ý tên thuốc và điền sẵn lịch uống.",
+        targetRef: imageEntryRef,
+      },
+      {
+        title: "Nhập tay khi cần",
+        description:
+          "Nếu ảnh không rõ hoặc cần chỉnh lại, nhập tên thuốc thủ công rồi chọn đúng thuốc từ danh sách gợi ý.",
+        targetRef: manualEntryRef,
+      },
+    ],
+    [],
+  )
+
+  const activeAddTourStep = showAddTour ? addTourSteps[addTourIndex] : null
+
+  React.useEffect(() => {
+    if (!showAddTour || !activeAddTourStep) return
+
+    const updateRect = () => {
+      const node = activeAddTourStep.targetRef.current
+      if (!node) {
+        setAddTourRect(null)
+        return
+      }
+      node.scrollIntoView({ block: "center", behavior: "smooth" })
+      setAddTourRect(node.getBoundingClientRect())
+    }
+
+    const frame = window.requestAnimationFrame(updateRect)
+    window.addEventListener("resize", updateRect)
+    window.addEventListener("scroll", updateRect, true)
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener("resize", updateRect)
+      window.removeEventListener("scroll", updateRect, true)
+    }
+  }, [activeAddTourStep, showAddTour])
+
+  function clearPendingAddTour() {
+    clearPendingPlanTour(planId)
+    setShowAddTour(false)
+    setAddTourIndex(0)
+    setAddTourRect(null)
+  }
+
+  function nextAddTourStep() {
+    if (addTourIndex === addTourSteps.length - 1) {
+      clearPendingAddTour()
+      return
+    }
+    setAddTourIndex((value) => value + 1)
   }
 
   function saveMeds(meds: Medication[]) {
@@ -383,11 +472,7 @@ export default function PlanDetailPage() {
           {plan.medications.length > 0 && (
             <Button
               size="sm"
-              onClick={() => {
-                resetForm()
-                loadCatalog()
-                setDialogOpen(true)
-              }}
+              onClick={openAddDialog}
             >
               <RiAddLine /> Thêm thuốc
             </Button>
@@ -406,11 +491,7 @@ export default function PlanDetailPage() {
             />
           ))}
           <button
-            onClick={() => {
-              resetForm()
-              loadCatalog()
-              setDialogOpen(true)
-            }}
+            onClick={openAddDialog}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
           >
             <RiAddLine className="size-4" /> Thêm thuốc
@@ -418,14 +499,23 @@ export default function PlanDetailPage() {
         </div>
       </main>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open)
+          if (!open) {
+            clearPendingAddTour()
+            resetForm()
+          }
+        }}
+      >
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Thêm thuốc</DialogTitle>
           </DialogHeader>
 
           <div className="flex flex-col gap-4">
-            <div className="flex gap-2">
+            <div ref={imageEntryRef} className="flex gap-2">
               <Button
                 variant="outline"
                 className="flex-1"
@@ -453,9 +543,15 @@ export default function PlanDetailPage() {
               </div>
             )}
 
-            {ocrLoading && (
+            {ocrLoading && !cloudParsing && (
               <p className="text-center text-sm text-muted-foreground">
-                Đang đọc đơn thuốc...
+                Đang đọc đơn thuốc trên thiết bị...
+              </p>
+            )}
+
+            {cloudParsing && (
+              <p className="text-center text-sm text-muted-foreground">
+                Đang trích xuất thuốc bằng AI...
               </p>
             )}
 
@@ -529,38 +625,40 @@ export default function PlanDetailPage() {
               onChange={handleFileChange}
             />
 
-            <div className="flex items-center gap-3">
-              <Separator className="flex-1" />
-              <span className="text-xs text-muted-foreground">
-                hoặc nhập tay
-              </span>
-              <Separator className="flex-1" />
-            </div>
+            <div ref={manualEntryRef} className="flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <Separator className="flex-1" />
+                <span className="text-xs text-muted-foreground">
+                  hoặc nhập tay
+                </span>
+                <Separator className="flex-1" />
+              </div>
 
-            <div className="relative flex flex-col gap-1.5">
-              <label className="text-sm font-medium">
-                Tên thuốc <span className="text-destructive">*</span>
-              </label>
-              <Input
-                placeholder="VD: Paracetamol 500mg"
-                value={medName}
-                onChange={(e) => updateSuggestions(e.target.value)}
-                autoFocus
-              />
-              {suggestions.length > 0 && (
-                <div className="absolute top-full right-0 left-0 z-20 mt-1 rounded-lg border bg-background shadow-lg">
-                  {suggestions.map((s) => (
-                    <button
-                      key={s.name}
-                      type="button"
-                      className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-muted"
-                      onClick={() => pickSuggestion(s)}
-                    >
-                      <span>{s.name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="relative flex flex-col gap-1.5">
+                <label className="text-sm font-medium">
+                  Tên thuốc <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  placeholder="VD: Paracetamol 500mg"
+                  value={medName}
+                  onChange={(e) => updateSuggestions(e.target.value)}
+                  autoFocus
+                />
+                {suggestions.length > 0 && (
+                  <div className="absolute top-full right-0 left-0 z-20 mt-1 rounded-lg border bg-background shadow-lg">
+                    {suggestions.map((s) => (
+                      <button
+                        key={s.name}
+                        type="button"
+                        className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-muted"
+                        onClick={() => pickSuggestion(s)}
+                      >
+                        <span>{s.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -632,6 +730,20 @@ export default function PlanDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {showAddTour && activeAddTourStep && (
+        <QuickTourOverlay
+          rect={addTourRect}
+          step={activeAddTourStep}
+          index={addTourIndex}
+          count={addTourSteps.length}
+          label="Hướng dẫn thêm thuốc"
+          onClose={clearPendingAddTour}
+          onBack={addTourIndex > 0 ? () => setAddTourIndex((value) => value - 1) : undefined}
+          onNext={nextAddTourStep}
+          nextLabel={addTourIndex === addTourSteps.length - 1 ? "Bắt đầu thêm thuốc" : undefined}
+        />
+      )}
 
       <Dialog
         open={!!editMed}

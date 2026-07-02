@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
+import { MAX_PARSE_TEXT_CHARS, sanitizePrescriptionText } from "@/lib/prescription-sanitizer"
 import { Prescription } from "@/types"
 import type { MedicineType } from "@/types"
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-const SYSTEM_PROMPT = `You are a Vietnamese prescription parser. The input is raw OCR text from a photo of a paper prescription — expect messy, misaligned, and sometimes truncated text.
+const SYSTEM_PROMPT = `You are a Vietnamese prescription parser. The input is sanitized OCR text from a photo of a paper prescription — expect messy, misaligned, and sometimes truncated text.
 
 Extract all medications. For each, return:
 - name: the generic drug name (strip brand names in parentheses, e.g. "Etoricoxib(Roticox" → "Etoricoxib")
@@ -34,6 +35,14 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (!text || typeof text !== "string") {
     return NextResponse.json({ error: "Missing text" }, { status: 400 })
   }
+  if (text.length > MAX_PARSE_TEXT_CHARS) {
+    return NextResponse.json({ error: "Text too long" }, { status: 413 })
+  }
+
+  const sanitizedText = sanitizePrescriptionText(text)
+  if (!sanitizedText) {
+    return NextResponse.json({ error: "No medication text after sanitization" }, { status: 400 })
+  }
 
   const res = await fetch(GROQ_API_URL, {
     method: "POST",
@@ -45,7 +54,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       model: "llama-3.3-70b-versatile",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `OCR text:\n${text}` },
+        { role: "user", content: `OCR text:\n${sanitizedText}` },
       ],
       temperature: 0.1,
       max_tokens: 1024,

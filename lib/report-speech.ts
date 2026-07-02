@@ -14,9 +14,13 @@ export function buildReportSpeech(result: VerificationResult): string {
 }
 
 function statusSentence(status: VerificationResult["status"]): string {
-  if (status === "pass") return "Khay thuốc đạt. Không phát hiện sai lệch."
-  if (status === "fail") return "Khay thuốc chưa đạt. Vui lòng kiểm tra lại trước khi uống."
-  return "Khay thuốc gần đúng, nhưng vẫn cần kiểm tra thủ công trước khi uống."
+  if (status === "pass") {
+    return "Khay thuốc đạt. Không phát hiện sai lệch. Có thể uống theo đơn."
+  }
+  if (status === "fail") {
+    return "Dừng lại. Khay thuốc chưa đúng. Vui lòng kiểm tra lại trước khi uống."
+  }
+  return "Cần kiểm tra thủ công. Hãy nhờ người thân, dược sĩ, hoặc nhân viên y tế xem lại trước khi uống."
 }
 
 function summarySentence(result: VerificationResult): string {
@@ -44,11 +48,14 @@ function resultSentences(result: Result): string[] {
   }
   if (result.status === "extra") {
     if (result.expected === 0) {
-      return [`Phát hiện ${result.detected} ${result.unit} ${result.name} ngoài kế hoạch.`]
+      return [`Phát hiện ${result.detected} ${result.unit} ngoài kế hoạch. Cần kiểm tra bằng mắt vì model có thể nhầm thuốc lạ thành thuốc đã biết.`]
     }
     return [`Thừa ${result.detected - result.expected} ${result.unit} ${result.name}. Cần ${result.expected}, hiện thấy ${result.detected}.`]
   }
   if (result.status === "unclear") {
+    if (result.safetyReason === "visual_lookalike") {
+      return [`${result.name} có thể giống thuốc khác. Cần kiểm tra nhãn hoặc vỉ thuốc trước khi uống.`]
+    }
     return [`${result.name} chưa đủ rõ để xác nhận. Vui lòng chụp lại gần hơn, đủ sáng hơn.`]
   }
   return []

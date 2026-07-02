@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { normalizeLlmMedicine } from "../lib/parser"
+import { sanitizePrescriptionText } from "../lib/prescription-sanitizer"
 import { Prescription } from "../types"
 
 describe("normalizeLlmMedicine", () => {
@@ -51,5 +52,24 @@ describe("Prescription schema", () => {
     ])
 
     expect(result.success).toBe(true)
+  })
+})
+
+describe("sanitizePrescriptionText", () => {
+  test("removes likely patient data and keeps medication context", () => {
+    const sanitized = sanitizePrescriptionText([
+      "Bệnh viện Đa khoa",
+      "Họ tên: Nguyễn Văn A",
+      "Địa chỉ: 123 Lê Lợi",
+      "1. Parseetamol 500mg",
+      "Sáng 1 viên, trưa 1 viên, chiều 1 viên",
+      "Bác sĩ: Trần B",
+    ].join("\n"))
+
+    expect(sanitized).toContain("Parseetamol 500mg")
+    expect(sanitized).toContain("Sáng 1 viên")
+    expect(sanitized.includes("Nguyễn Văn A")).toBe(false)
+    expect(sanitized.includes("123 Lê Lợi")).toBe(false)
+    expect(sanitized.includes("Bác sĩ")).toBe(false)
   })
 })

@@ -1,6 +1,6 @@
 # DOSE — Pill Tray Verification PWA
 
-Vietnamese pill tray verification. User creates a treatment plan from a prescription photo, then verifies their pill tray matches. All AI runs on-device.
+Vietnamese pill tray verification. User creates a treatment plan from a prescription photo, then verifies their pill tray matches. OCR, YOLO, and catalog matching run on-device. Prescription LLM parsing uses Groq with minimized OCR text, not images.
 
 ## User Flow (3 steps)
 
@@ -13,7 +13,7 @@ Create plan    →     Add medications  →    Photograph tray
 
 **Home** — lists plans. Each plan has "Quản lý thuốc" (add/edit meds). Prominent "Kiểm tra khay thuốc hôm nay" button for global verification.
 
-**Plan** (`/plan/[id]`) — add medications via OCR (upload prescription photo) or manual entry with autocomplete against the YOLO drug catalog. Set session doses (Sáng/Trưa/Chiều/Tối), meal timing, notes.
+**Plan** (`/plan/[id]`) — add medications via OCR (upload prescription photo) or manual entry with autocomplete against the YOLO drug catalog. OCR runs locally. Cloud AI extraction runs after OCR and uses sanitized text. Set session doses (Sáng/Trưa/Chiều/Tối), meal timing, notes.
 
 **Verify** (`/verify`) — global verification. Optional meal timing toggle (Trước ăn/Sau ăn). Photograph pill tray. Camera or file upload.
 
@@ -93,17 +93,19 @@ Maps a drug name (from OCR or manual entry) to YOLO class IDs.
 
 `findDrug(text)` → `{ classIds, matchedName } | null`
 
-Three explicit, named steps. No Levenshtein. No `normalize()`.
+Four explicit, named steps. No `normalize()`.
 
 1. **`stripDosage`** — removes dosage units (`\d+[,.]?\d*\s*(mg|g|ml|mcg|ui)`)
 2. **`cleanForLookup`** — lowercase, replace punctuation with spaces, collapse whitespace. Keeps Vietnamese Unicode characters.
 3. **Exact match** in cleaned catalog map → if not found, **contains match** (key includes input or input includes key)
+4. **Bounded fuzzy match** — compact spaces, use a small edit-distance threshold, require one clear best match
 
 Examples:
 
 ```
 "PARACETAMOL 500MG" → "paracetamol" → exact → [0] ✓
 "RENAPRI" (truncated) → "renapri" → "renapril".includes("renapri") → [47] ✓
+"Parseetamol" (OCR typo) → fuzzy → "paracetamol" → [0] ✓
 "HOẠT HUYẾT DƯỠNG NÃO" → exact match after cleaning → [64] ✓
 "DIAMICRON" → not in catalog → null ✓
 ```
@@ -118,14 +120,14 @@ Examples:
 
 ## Prescription Parser (`lib/parser.ts`)
 
-LLM-only parser. No rule-based fallback.
+Groq-backed LLM parser. It is cloud-based and runs after local OCR with sanitized text.
 
 ### How it works
 
 1. OCR extracts text from prescription photo (PaddleOCR detection + Tesseract recognition).
-2. `parseWithLLM(text)` sends raw OCR text to Groq API (`llama-3.3-70b-versatile`).
+2. `parsePrescription(text, "groq")` sanitizes OCR text and sends minimized candidate text to Groq API (`llama-3.3-70b-versatile`).
 3. LLM extracts: drug name, sessions (sáng→morning, trưa→noon, chiều→afternoon, tối→evening), dosage, unit (viên/ống/gói/chai), quantity, meal timing.
-4. `findDrug()` maps each extracted name to YOLO class IDs.
+4. `findDrug()` maps each extracted name to YOLO class IDs and canonicalizes matched names.
 5. Returns `ParsedMed[]` for user to review and save.
 
 ### Failure states
@@ -220,14 +222,15 @@ Output tensor layout is Ultralytics YOLO export format: `[cx, cy, w, h, cls0...c
 
 ### When it triggers
 
-`parseWithLLM()` is called for every OCR text > 10 chars. This is the primary parsing path.
+`/api/parse` is called after OCR quality passes. OCR upload sends no image to Groq.
 
 ### How it works
 
-1. Route receives `{ text }` (raw OCR output).
-2. Sends text to **Groq API** (`llama-3.3-70b-versatile`).
-3. Validates response with Zod `Prescription` schema.
-4. Returns `{ prescription: MedicineType[] }`.
+1. Route receives `{ text }` (already sanitized OCR candidate text).
+2. Rejects overly long payloads and sanitizes again server-side.
+3. Sends text to **Groq API** (`llama-3.3-70b-versatile`).
+4. Validates response with Zod `Prescription` schema.
+5. Returns `{ prescription: MedicineType[] }`.
 
 ### Config
 
@@ -238,7 +241,7 @@ Temperature   — 0.1 (deterministic)
 Max tokens    — 1024
 ```
 
-No user consent prompt — silent auto-call when user uploads prescription photo.
+No images, plans, tray photos, or localStorage data are sent.
 
 ---
 
@@ -277,7 +280,8 @@ dose/
 │   │   └── index.ts       Domain types (Plan, Medication, Result, ParsedMed, etc.)
 │   ├── catalog.ts         Drug matching + verification counting
 │   ├── verification.ts    Shared verification engine
-│   ├── parser.ts          LLM-only prescription parser
+│   ├── parser.ts          Prescription parser backend boundary
+│   ├── prescription-sanitizer.ts  OCR text minimization before cloud parsing
 │   ├── storage.ts         localStorage CRUD + migration
 │   ├── ocr.ts             PaddleOCR detect + Tesseract recognize
 │   ├── yolo.ts            YOLO12s ONNX inference
@@ -346,9 +350,9 @@ One tray contains pills from all prescriptions. Global `/verify` merges all plan
 
 PaddleOCR finds text regions. Tesseract reads Vietnamese text inside each region. Paddle's `rec.onnx` is loaded because the `paddleocr` npm package requires both models for initialization, but its recognition output is discarded in favor of Tesseract's better Vietnamese accuracy.
 
-### LLM-only parser
+### Groq parser with minimized text
 
-No rule-based parser. LLM handles messy OCR text, multi-session extraction, unit detection. Simpler codebase, better accuracy.
+LLM handles messy OCR text, multi-session extraction, unit detection. Groq stays for current accuracy/performance, but cloud parsing sends minimized OCR text only. On-device LLM can replace this behind the parser boundary later.
 
 ### localStorage over IndexedDB
 
@@ -358,27 +362,29 @@ Plans are small JSON arrays. `migrateMed()` handles field renames on read. Simpl
 
 ## Edge Cases
 
-| Case                                  | Behavior                                                                  |
-| ------------------------------------- | ------------------------------------------------------------------------- |
-| No sessions on a drug                 | Identity-only check. "Có trong khay ✓" or "Không tìm thấy ✗".             |
-| Drug not in YOLO model                | Amber warning box. "Thuốc chưa có trong model, sẽ cần kiểm tra thủ công". |
-| Pills detected with confidence < 0.65 | `"unclear"` status. Amber warning. "Vui lòng chụp lại".                   |
-| Empty tray (0 detections)             | All expected → missing. Normal FAIL.                                      |
-| Pill in tray but wrong session        | `"extra"` — shows as detected but unexpected.                             |
-| Old localStorage data                 | `migrateMed()` converts `schedules`→`doses`, drops `known`.               |
-| OCR reads "RENAPRI" (truncated)       | `findDrug` substring match → "renapril" → class 47 ✓                      |
-| Multiple drugs in prescription        | OCR parses all. User selects which to save.                               |
-| Manual entry with catalog match       | Autocomplete dropdown → pick → classId auto-set.                          |
-| No `GROQ_API_KEY` in `.env`           | LLM fallback returns empty. Shows "nhập thủ công" prompt.                 |
-| OCR/LLM failure                       | Amber error message: "Không đọc được đơn thuốc, vui lòng nhập tay".       |
+| Case | Behavior |
+|---|---|
+| No sessions on a drug | Identity-only check. "Có trong khay ✓" or "Không tìm thấy ✗". |
+| Drug not in YOLO model | Amber warning box. "Thuốc chưa có trong model, sẽ cần kiểm tra thủ công". |
+| Pills detected with confidence < 0.65 | `"unclear"` status. Amber warning. "Vui lòng chụp lại". |
+| Empty tray (0 detections) | All expected → missing. Normal FAIL. |
+| Pill in tray but wrong session | `"extra"` — shows as detected but unexpected. |
+| Old localStorage data | `migrateMed()` converts `schedules`→`doses`, drops `known`. |
+| OCR reads "RENAPRI" (truncated) | `findDrug` substring match → "renapril" → class 47 ✓ |
+| OCR reads "Parseetamol" | `findDrug` bounded fuzzy match → "paracetamol" → class 0 ✓ |
+| Multiple drugs in prescription | OCR parses all. User selects which to save. |
+| Manual entry with catalog match | Autocomplete dropdown → pick → classId auto-set. |
+| No `GROQ_API_KEY` in `.env` | LLM fallback returns empty. Shows "nhập tay" prompt. |
+| OCR/LLM failure | Amber error message: "Không đọc được đơn thuốc, vui lòng nhập tay". |
 
 ---
 
 ## Constraints
 
 - **108 YOLO classes** (0-106 named medicines, 107 = ngoài đơn). New drugs cannot be added without retraining.
-- **On-device inference** — YOLO + OCR run in browser. No images leave the device.
+- **On-device vision** — YOLO + OCR run in browser. No images leave the device.
+- **Cloud parsing is minimized** — Groq receives sanitized OCR text only; images stay local.
 - **Vietnamese-first** — all UI, labels, drug names in Vietnamese.
 - **Minimal code** — no comments unless the logic isn't obvious from the name. Functions under 25 lines where possible.
-- **No dependencies on external APIs at runtime** — LLM fallback is optional (gated by `GROQ_API_KEY`).
+- **External API limited to parser** — Groq is used only for prescription parsing and requires `GROQ_API_KEY`.
 - **Light-only UI** — no dark mode, no theme provider.

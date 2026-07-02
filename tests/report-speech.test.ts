@@ -13,6 +13,7 @@ const base: VerificationResult = {
 describe("buildReportSpeech", () => {
   test("summarizes passing reports", () => {
     expect(buildReportSpeech(base)).toContain("Khay thuốc đạt")
+    expect(buildReportSpeech(base)).toContain("Có thể uống theo đơn")
   })
 
   test("summarizes missing, extra, unclear, and manual-check items", () => {
@@ -63,10 +64,18 @@ describe("buildReportSpeech", () => {
       ],
     })
 
+    expect(speech).toContain("Dừng lại")
     expect(speech).toContain("Thiếu 1 viên paracetamol")
     expect(speech).toContain("Cần 2, hiện thấy 1")
-    expect(speech).toContain("Phát hiện 1 viên atoris ngoài kế hoạch")
+    expect(speech).toContain("Phát hiện 1 viên ngoài kế hoạch")
     expect(speech).toContain("renapril chưa đủ rõ để xác nhận")
     expect(speech).toContain("DIAMICRON chưa có trong model")
+  })
+
+  test("asks for manual help when the report needs manual check", () => {
+    const speech = buildReportSpeech({ ...base, status: "manual_check" })
+
+    expect(speech).toContain("Cần kiểm tra thủ công")
+    expect(speech).toContain("người thân")
   })
 })

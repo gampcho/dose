@@ -23,9 +23,12 @@ import {
   RiQuestionLine,
   RiScanLine,
   RiRocketLine,
+  RiStopCircleLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
+import { markOnboardingSeen } from "@/lib/onboarding"
+import { speakVietnamese, stopSpeech } from "@/lib/speech"
 import { cn } from "@/lib/utils"
 
 type SlideIcon = typeof RiCapsuleLine
@@ -156,7 +159,7 @@ const SLIDES: Slide[] = [
       {
         icon: RiQuestionLine,
         iconClass: "text-primary",
-        text: "Muốn xem lại hướng dẫn, bấm nút dấu hỏi (?) ở góc trên trang chính",
+        text: "Muốn xem lại hướng dẫn nhanh, bấm nút dấu hỏi (?) ở góc trên trang chính",
       },
     ],
   },
@@ -176,7 +179,7 @@ export default function GuidelinePage() {
 
   function goNext() {
     if (isLast) {
-      localStorage.setItem("dose:onboarding_seen", "1")
+      markOnboardingSeen()
       router.push("/")
     } else {
       setIndex(index + 1)
@@ -189,21 +192,42 @@ export default function GuidelinePage() {
     else if (!isLast) setIndex(index + 1)
   }
 
+  function speakSlide() {
+    const text = [
+      slide.badge,
+      slide.title,
+      slide.description,
+      ...slide.details.map((detail) => detail.text),
+    ]
+      .filter(Boolean)
+      .join(". ")
+
+    speakVietnamese(text)
+  }
+
   return (
     <div className="flex min-h-svh flex-col bg-background">
       <header className="flex items-center justify-between px-6 py-5">
         <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
           {slide.badge}
         </span>
-        <button
-          onClick={() => {
-            localStorage.setItem("dose:onboarding_seen", "1")
-            router.push("/")
-          }}
-          className="text-base text-muted-foreground hover:text-foreground"
-        >
-          Bỏ qua
-        </button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon-sm" onClick={speakSlide}>
+            <RiVolumeUpLine className="size-4" />
+          </Button>
+          <Button variant="ghost" size="icon-sm" onClick={stopSpeech}>
+            <RiStopCircleLine className="size-4" />
+          </Button>
+          <button
+            onClick={() => {
+              markOnboardingSeen()
+              router.push("/")
+            }}
+            className="text-base text-muted-foreground hover:text-foreground"
+          >
+            Bỏ qua
+          </button>
+        </div>
       </header>
 
       <main

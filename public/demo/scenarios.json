@@ -1,0 +1,161 @@
+[
+  {
+    "id": "verified_pass",
+    "name": "Demo đạt — Renapril + Hoạt huyết",
+    "description": "Ảnh pilltray_2 được model phát hiện đúng: RENAPRIL x1 + HOẠT HUYẾT x2. Kết quả PASS.",
+    "prescription": "prescription_0.png",
+    "pilltray": "pilltray_2.png",
+    "tray_session": "morning",
+    "meal_timing": null,
+    "ocr_text": "1) RENAPRIL 5MG 5mg SL: 28 Viên Ghi chú Uống: Sáng 1 Viên 2) HOẠT HUYẾT DƯỠNG NÃO 150mg+20mg SL: 20 Viên Ghi chú Uống: Tối 2 Viên Sáng 2 Viên",
+    "plan": {
+      "medications": [
+        {
+          "name": "RENAPRIL",
+          "classId": 47,
+          "doses": [{ "session": "morning", "pillCount": 1 }],
+          "mealTiming": null
+        },
+        {
+          "name": "HOẠT HUYẾT DƯỠNG NÃO",
+          "classId": 64,
+          "doses": [
+            { "session": "morning", "pillCount": 2 },
+            { "session": "evening", "pillCount": 2 }
+          ],
+          "mealTiming": null
+        }
+      ]
+    },
+    "detections": [
+      { "classId": 47, "confidence": 0.947, "label": "renapril" },
+      { "classId": 64, "confidence": 0.873, "label": "hoạt huyết dưỡng não" },
+      { "classId": 64, "confidence": 0.86, "label": "hoạt huyết dưỡng não" }
+    ],
+    "expected_results": [
+      { "classId": 47, "expected": 1, "detected": 1, "status": "correct" },
+      { "classId": 64, "expected": 2, "detected": 2, "status": "correct" }
+    ],
+    "expected_unknown": [],
+    "expected_overall": "pass"
+  },
+  {
+    "id": "verified_missing",
+    "name": "Demo thiếu thuốc — thiếu Renapril",
+    "description": "Ảnh pilltray_0 chỉ có HOẠT HUYẾT x2, nhưng đơn yêu cầu thêm RENAPRIL x1. Kết quả FAIL.",
+    "prescription": "prescription_0.png",
+    "pilltray": "pilltray_0.png",
+    "tray_session": "morning",
+    "meal_timing": null,
+    "ocr_text": "1) RENAPRIL 5MG 5mg SL: 28 Viên Ghi chú Uống: Sáng 1 Viên 2) HOẠT HUYẾT DƯỠNG NÃO 150mg+20mg SL: 20 Viên Ghi chú Uống: Tối 2 Viên Sáng 2 Viên",
+    "plan": {
+      "medications": [
+        {
+          "name": "RENAPRIL",
+          "classId": 47,
+          "doses": [{ "session": "morning", "pillCount": 1 }],
+          "mealTiming": null
+        },
+        {
+          "name": "HOẠT HUYẾT DƯỠNG NÃO",
+          "classId": 64,
+          "doses": [{ "session": "morning", "pillCount": 2 }],
+          "mealTiming": null
+        }
+      ]
+    },
+    "detections": [
+      { "classId": 64, "confidence": 0.864, "label": "hoạt huyết dưỡng não" },
+      { "classId": 64, "confidence": 0.823, "label": "hoạt huyết dưỡng não" }
+    ],
+    "expected_results": [
+      { "classId": 47, "expected": 1, "detected": 0, "status": "missing" },
+      { "classId": 64, "expected": 2, "detected": 2, "status": "correct" }
+    ],
+    "expected_unknown": [],
+    "expected_overall": "fail"
+  },
+  {
+    "id": "verified_extra",
+    "name": "Demo sai khay — thừa Novoxim",
+    "description": "Ảnh pilltray_1 có HOẠT HUYẾT x2 và NOVOXIM x1, nhưng thiếu RENAPRIL x1. Kết quả FAIL.",
+    "prescription": "prescription_0.png",
+    "pilltray": "pilltray_1.png",
+    "tray_session": "morning",
+    "meal_timing": null,
+    "ocr_text": "1) RENAPRIL 5MG 5mg SL: 28 Viên Ghi chú Uống: Sáng 1 Viên 2) HOẠT HUYẾT DƯỠNG NÃO 150mg+20mg SL: 20 Viên Ghi chú Uống: Tối 2 Viên Sáng 2 Viên",
+    "plan": {
+      "medications": [
+        {
+          "name": "RENAPRIL",
+          "classId": 47,
+          "doses": [{ "session": "morning", "pillCount": 1 }],
+          "mealTiming": null
+        },
+        {
+          "name": "HOẠT HUYẾT DƯỠNG NÃO",
+          "classId": 64,
+          "doses": [{ "session": "morning", "pillCount": 2 }],
+          "mealTiming": null
+        }
+      ]
+    },
+    "detections": [
+      { "classId": 10, "confidence": 0.874, "label": "novoxim-500" },
+      { "classId": 64, "confidence": 0.874, "label": "hoạt huyết dưỡng não" },
+      { "classId": 64, "confidence": 0.85, "label": "hoạt huyết dưỡng não" }
+    ],
+    "expected_results": [
+      { "classId": 47, "expected": 1, "detected": 0, "status": "missing" },
+      { "classId": 64, "expected": 2, "detected": 2, "status": "correct" },
+      { "classId": 10, "expected": 0, "detected": 1, "status": "extra" }
+    ],
+    "expected_unknown": [],
+    "expected_overall": "fail"
+  },
+  {
+    "id": "verified_manual_check",
+    "name": "Demo cần kiểm tra — thuốc ngoài model",
+    "description": "Ảnh pilltray_2 khớp các thuốc model biết, nhưng đơn có DIAMICRON chưa có trong model. Kết quả CẦN KIỂM TRA.",
+    "prescription": "prescription_1.png",
+    "pilltray": "pilltray_2.png",
+    "tray_session": "morning",
+    "meal_timing": null,
+    "ocr_text": "1) RENAPRIL 5MG 5mg SL: 28 Viên Ghi chú Uống: Sáng 1 Viên 2) HOẠT HUYẾT DƯỠNG NÃO 150mg+20mg SL: 20 Viên Ghi chú Uống: Sáng 2 Viên 3) DIAMICRON MR TAB 30MG 60'S 30mg SL: 30 Viên Ghi chú Uống: Sáng 1 Viên",
+    "plan": {
+      "medications": [
+        {
+          "name": "RENAPRIL",
+          "classId": 47,
+          "doses": [{ "session": "morning", "pillCount": 1 }],
+          "mealTiming": null
+        },
+        {
+          "name": "HOẠT HUYẾT DƯỠNG NÃO",
+          "classId": 64,
+          "doses": [{ "session": "morning", "pillCount": 2 }],
+          "mealTiming": null
+        },
+        {
+          "name": "DIAMICRON MR TAB",
+          "classId": null,
+          "doses": [{ "session": "morning", "pillCount": 1 }],
+          "mealTiming": "before"
+        }
+      ]
+    },
+    "detections": [
+      { "classId": 47, "confidence": 0.947, "label": "renapril" },
+      { "classId": 64, "confidence": 0.873, "label": "hoạt huyết dưỡng não" },
+      { "classId": 64, "confidence": 0.86, "label": "hoạt huyết dưỡng não" }
+    ],
+    "expected_results": [
+      { "classId": 47, "expected": 1, "detected": 1, "status": "correct" },
+      { "classId": 64, "expected": 2, "detected": 2, "status": "correct" }
+    ],
+    "expected_unknown": [
+      { "name": "DIAMICRON MR TAB", "classId": null, "expected": 1, "detected": 0 }
+    ],
+    "expected_overall": "manual_check"
+  }
+]

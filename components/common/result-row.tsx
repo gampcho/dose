@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import {
   RiCheckboxCircleFill,
   RiCloseCircleFill,
@@ -9,27 +8,12 @@ import {
 
 import { cn } from "@/lib/utils"
 import type { Result } from "@/lib/types"
-import type { FeedbackValue } from "@/lib/feedback"
 
-export function ResultRow({
-  result,
-  onFeedback,
-}: {
-  result: Result
-  onFeedback?: (
-    result: Result,
-    feedback: FeedbackValue,
-    correctionText?: string,
-  ) => void
-}) {
-  const [correctionText, setCorrectionText] = React.useState("")
-  const [showCorrection, setShowCorrection] = React.useState(false)
-
+export function ResultRow({ result }: { result: Result }) {
   const isCorrect = result.status === "correct"
   const isMissing = result.status === "missing"
   const isExtra = result.status === "extra"
   const isUnclear = result.status === "unclear"
-
   const diff = result.detected - result.expected
 
   return (
@@ -79,14 +63,6 @@ export function ResultRow({
               {result.detected} {result.unit}
             </span>
           </span>
-          {result.confidence > 0 && (
-            <span className="text-muted-foreground">
-              Confidence:{" "}
-              <span className="font-semibold text-foreground">
-                {(result.confidence * 100).toFixed(0)}%
-              </span>
-            </span>
-          )}
         </div>
 
         {isMissing && (
@@ -96,68 +72,31 @@ export function ResultRow({
         )}
         {isExtra && (
           <p className="text-xs text-red-600 dark:text-red-400">
-            Phát hiện {result.detected} {result.unit}, thuốc ngoài liệu trình
+            Phát hiện {result.detected} {result.unit} ngoài liệu trình, cần
+            kiểm tra bằng mắt
+          </p>
+        )}
+        {isExtra && result.modelName && (
+          <p className="text-xs text-muted-foreground">
+            Gợi ý model: {result.modelName}
           </p>
         )}
         {isUnclear && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            Không rõ, vui lòng chụp lại
+            {unclearMessage(result.safetyReason)}
           </p>
-        )}
-
-        {onFeedback && (
-          <div className="mt-2 flex flex-col gap-2">
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => onFeedback(result, "correct")}
-                className="rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted"
-              >
-                Đúng
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCorrection((current) => !current)}
-                className="rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted"
-              >
-                Sai
-              </button>
-              <button
-                type="button"
-                onClick={() => onFeedback(result, "unclear")}
-                className="rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted"
-              >
-                Không rõ
-              </button>
-            </div>
-            {showCorrection && (
-              <div className="flex gap-2">
-                <input
-                  value={correctionText}
-                  onChange={(e) => setCorrectionText(e.target.value)}
-                  placeholder="Sửa tên thuốc hoặc số lượng"
-                  className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    onFeedback(
-                      result,
-                      "incorrect",
-                      correctionText.trim() || undefined,
-                    )
-                    setCorrectionText("")
-                    setShowCorrection(false)
-                  }}
-                  className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground"
-                >
-                  Lưu
-                </button>
-              </div>
-            )}
-          </div>
         )}
       </div>
     </div>
   )
+}
+
+function unclearMessage(reason: Result["safetyReason"]): string {
+  if (reason === "visual_lookalike") {
+    return "Thuốc có thể giống thuốc khác, cần kiểm tra nhãn hoặc vỉ thuốc"
+  }
+  if (reason === "weak_margin" || reason === "ood_competitive") {
+    return "Model chưa đủ chắc để xác nhận tên thuốc, cần kiểm tra bằng mắt"
+  }
+  return "Ảnh chưa đủ rõ, vui lòng chụp lại"
 }

@@ -10,6 +10,8 @@ import {
   RiRefreshLine,
   RiVolumeUpLine,
   RiDownloadLine,
+  RiShareForwardLine,
+  RiStopCircleLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
@@ -34,10 +36,12 @@ import {
   type FeedbackValue,
 } from "@/lib/feedback"
 import type { Result, Session } from "@/lib/types"
-import { speakVietnamese } from "@/lib/speech"
-
-const IMAGE_KEY = "dose:verify:global:image"
-const MEAL_KEY = "dose:verify:global:meal"
+import { speakVietnamese, stopSpeech } from "@/lib/speech"
+import {
+  VERIFY_IMAGE_KEY,
+  VERIFY_MEAL_KEY,
+  VERIFY_SESSION_KEY,
+} from "@/lib/onboarding"
 
 export default function GlobalReportPage() {
   const router = useRouter()
@@ -48,19 +52,23 @@ export default function GlobalReportPage() {
   const [result, setResult] = React.useState<VerificationResult | null>(null)
   const [detections, setDetections] = React.useState<Detection[]>([])
   const [feedbackItems, setFeedbackItems] = React.useState<FeedbackItem[]>([])
+  const [autoReviewItems, setAutoReviewItems] = React.useState<FeedbackItem[]>(
+    [],
+  )
   const [feedbackMessage, setFeedbackMessage] = React.useState<string | null>(null)
+  const [shareMessage, setShareMessage] = React.useState<string | null>(null)
   const [session, setSession] = React.useState<Session | null>(null)
 
   React.useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- current session must come from the client timezone
-    setSession(getCurrentSession())
+    setSession(readSessionOverride() ?? getCurrentSession())
 
     const plans = listPlans()
     if (plans.length === 0) {
       router.push("/")
       return
     }
-    const savedImage = sessionStorage.getItem(IMAGE_KEY)
+    const savedImage = sessionStorage.getItem(VERIFY_IMAGE_KEY)
     setImageUrl(savedImage)
     setFeedbackItems(listFeedback())
     if (!savedImage) setLoading(false)
@@ -112,6 +120,31 @@ export default function GlobalReportPage() {
     return () => { cancelled = true }
   }, [imageUrl, router, session])
 
+  React.useEffect(() => {
+    let cancelled = false
+
+    async function prepareReviewItems() {
+      if (!result || !session) {
+        setAutoReviewItems([])
+        return
+      }
+
+      const items = await buildAutomaticReviewItems({
+        result,
+        detections,
+        imageUrl,
+        session,
+        mealTiming: readMealTiming(),
+      })
+      if (!cancelled) setAutoReviewItems(items)
+    }
+
+    prepareReviewItems()
+    return () => {
+      cancelled = true
+    }
+  }, [detections, imageUrl, result, session])
+
   const status = result?.status
   const hasData =
     result &&
@@ -119,8 +152,8 @@ export default function GlobalReportPage() {
       result.unknownMeds.length > 0 ||
       result.identityMeds.length > 0)
   const reviewItems = React.useMemo(
-    () => [...feedbackItems, ...latestReviewItems(result)],
-    [feedbackItems, result],
+    () => [...feedbackItems, ...autoReviewItems],
+    [autoReviewItems, feedbackItems],
   )
   const reviewCount = reviewItems.length
 
@@ -132,18 +165,52 @@ export default function GlobalReportPage() {
     result: Result,
     feedback: FeedbackValue,
     correctionText?: string,
+    correctionCount?: number,
   ) {
+    void saveFeedback(result, feedback, correctionText, correctionCount)
+  }
+
+  async function saveFeedback(
+    result: Result,
+    feedback: FeedbackValue,
+    correctionText?: string,
+    correctionCount?: number,
+  ) {
+    const detection = bestDetection(detections, result.classId)
+    const crop = await cropDetection(imageUrl, detection)
+
     addFeedback({
+      source: "user_feedback",
       resultClassId: result.classId,
       resultName: result.name,
+      modelName: result.modelName,
+      detectorModel: "vaipe12n.onnx",
+      rawClassId: result.rawClassId,
+      rawModelName: result.rawModelName,
+      secondClassId: result.secondClassId,
+      secondModelName: result.secondModelName,
+      oodConfidence: result.oodConfidence,
+      margin: result.margin,
+      safetyReason: result.safetyReason,
       expected: result.expected,
       detected: result.detected,
+      confidence: result.confidence,
+      unit: result.unit,
       status: result.status,
       feedback,
       correctionText,
+      correctionCount,
+      correctedName:
+        feedback === "incorrect_name" ? correctionText?.trim() : undefined,
+      bbox: detection?.bbox,
+      cropImageDataUrl: crop?.dataUrl,
+      imageWidth: crop?.imageWidth,
+      imageHeight: crop?.imageHeight,
+      session: session ?? undefined,
+      mealTiming: readMealTiming(),
     })
     setFeedbackItems(listFeedback())
-    setFeedbackMessage("Đã lưu phản hồi để kiểm tra lại model")
+    setFeedbackMessage("Đã lưu phản hồi để đưa vào dữ liệu review model")
   }
 
   function exportReviewData() {
@@ -154,9 +221,34 @@ export default function GlobalReportPage() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = "dose-review-data.json"
+    link.download = "dose-review-bundle.json"
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  async function shareCaregiverSummary() {
+    if (!result || !session) return
+
+    const text = buildCaregiverSummary(result, session, readMealTiming())
+    const nav = navigator as Navigator & {
+      share?: (data: ShareData) => Promise<void>
+      clipboard?: Clipboard
+    }
+    try {
+      if (nav.share) {
+        await nav.share({ title: "Kết quả DOSE", text })
+        setShareMessage("Đã mở chia sẻ kết quả")
+        return
+      }
+      if (!nav.clipboard) {
+        setShareMessage("Trình duyệt không hỗ trợ chia sẻ kết quả")
+        return
+      }
+      await nav.clipboard.writeText(text)
+      setShareMessage("Đã sao chép kết quả")
+    } catch {
+      setShareMessage("Không thể chia sẻ, vui lòng thử lại")
+    }
   }
 
   return (
@@ -236,12 +328,12 @@ export default function GlobalReportPage() {
                   Ảnh khay thuốc
                 </p>
                 {imageUrl ? (
-                  <div className="relative overflow-hidden rounded-2xl border shadow-sm">
+                  <div className="overflow-hidden rounded-2xl border shadow-sm">
                     <BBoxOverlay
                       src={imageUrl}
                       detections={detections}
                       results={result!.results}
-                      className="relative"
+                      className="max-h-[28rem] w-full bg-muted/30"
                     />
                   </div>
                 ) : (
@@ -249,7 +341,6 @@ export default function GlobalReportPage() {
                     <p>Chưa có ảnh khay thuốc</p>
                   </div>
                 )}
-
                 <Button
                   variant="outline"
                   size="sm"
@@ -272,6 +363,29 @@ export default function GlobalReportPage() {
                   variant="outline"
                   size="sm"
                   className="w-full"
+                  onClick={stopSpeech}
+                >
+                  <RiStopCircleLine />
+                  Dừng đọc
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={shareCaregiverSummary}
+                >
+                  <RiShareForwardLine />
+                  Chia sẻ kết quả
+                </Button>
+                {shareMessage && (
+                  <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+                    {shareMessage}
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
                   onClick={() => router.push("/")}
                 >
                   Về trang chủ
@@ -285,19 +399,9 @@ export default function GlobalReportPage() {
 
                 <div className="flex flex-col gap-2">
                   {result!.results.map((r) => (
-                    <ResultRow
-                      key={r.classId}
-                      result={r}
-                      onFeedback={handleFeedback}
-                    />
+                    <ResultRow key={r.classId} result={r} />
                   ))}
                 </div>
-
-                {feedbackMessage && (
-                  <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-                    {feedbackMessage}
-                  </p>
-                )}
 
                 {result!.identityMeds.length > 0 && (
                   <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/40">
@@ -357,35 +461,6 @@ export default function GlobalReportPage() {
 
                 <Separator />
 
-                <div className="rounded-xl border bg-card px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold">
-                        Dữ liệu review model
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {reviewCount} mục cần kiểm tra hoặc đã được người dùng
-                        phản hồi
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={exportReviewData}
-                      disabled={reviewItems.length === 0}
-                    >
-                      <RiDownloadLine />
-                      Xuất JSON
-                    </Button>
-                  </div>
-                  {result!.results.some((r) => r.status === "unclear") && (
-                    <p className="mt-2 text-xs text-amber-600">
-                      Có kết quả chưa rõ, nên đưa vào tập review trước khi cập
-                      nhật model.
-                    </p>
-                  )}
-                </div>
-
                 <div className="flex gap-4 rounded-xl bg-muted/40 px-4 py-3 text-sm">
                   <div className="flex flex-1 flex-col items-center gap-0.5">
                     <span className="text-xl font-bold text-emerald-500">
@@ -394,7 +469,7 @@ export default function GlobalReportPage() {
                           .length
                       }
                     </span>
-                    <span className="text-xs text-muted-foreground">Đúng</span>
+                    <span className="text-xs text-muted-foreground">Khớp</span>
                   </div>
                   <div className="w-px bg-border" />
                   <div className="flex flex-1 flex-col items-center gap-0.5">
@@ -437,37 +512,246 @@ export default function GlobalReportPage() {
 }
 
 function readMealTiming(): MealTiming {
-  const value = sessionStorage.getItem(MEAL_KEY)
+  const value = sessionStorage.getItem(VERIFY_MEAL_KEY)
   return value === "before" || value === "after" ? value : null
 }
 
-function latestReviewItems(result: VerificationResult | null): FeedbackItem[] {
-  if (!result) return []
+function readSessionOverride(): Session | null {
+  const value = sessionStorage.getItem(VERIFY_SESSION_KEY)
+  if (
+    value === "morning" ||
+    value === "noon" ||
+    value === "afternoon" ||
+    value === "evening"
+  ) {
+    return value
+  }
+  return null
+}
 
+async function buildAutomaticReviewItems({
+  result,
+  detections,
+  imageUrl,
+  session,
+  mealTiming,
+}: {
+  result: VerificationResult
+  detections: Detection[]
+  imageUrl: string | null
+  session: Session
+  mealTiming: MealTiming
+}): Promise<FeedbackItem[]> {
   const createdAt = new Date().toISOString()
-  const unclear = result.results
-    .filter((item) => item.status === "unclear")
-    .map((item) => ({
-      id: `unclear-${item.classId}`,
+  const image = imageUrl ? await loadImageForReview(imageUrl) : null
+  const items: FeedbackItem[] = []
+
+  for (const item of result.results.filter(shouldReviewResult)) {
+    const detection = bestDetection(detections, item.classId)
+    const crop = detection && image ? cropDetectionFromImage(image, detection) : null
+    items.push({
+      id: `auto-${reviewFeedback(item)}-${item.classId}`,
       createdAt,
+      source: "auto_review",
       resultClassId: item.classId,
       resultName: item.name,
+      modelName: item.modelName,
+      detectorModel: "vaipe12n.onnx",
+      rawClassId: item.rawClassId,
+      rawModelName: item.rawModelName,
+      secondClassId: item.secondClassId,
+      secondModelName: item.secondModelName,
+      oodConfidence: item.oodConfidence,
+      margin: item.margin,
+      safetyReason: item.safetyReason,
       expected: item.expected,
       detected: item.detected,
+      confidence: item.confidence,
+      unit: item.unit,
       status: item.status,
-      feedback: "unclear" as const,
-    }))
+      feedback: reviewFeedback(item),
+      bbox: detection?.bbox,
+      cropImageDataUrl: crop?.dataUrl,
+      imageWidth: crop?.imageWidth,
+      imageHeight: crop?.imageHeight,
+      session,
+      mealTiming,
+    })
+  }
 
-  const unknown = result.unknownMeds.map((item) => ({
-    id: `unknown-${item.id}`,
-    createdAt,
-    resultName: item.name,
-    expected: item.expected,
-    status: "unknown" as const,
-    feedback: "unclear" as const,
-  }))
+  for (const item of result.identityMeds.filter((item) => !item.present)) {
+    items.push({
+      id: `auto-identity-${item.med.id}`,
+      createdAt,
+      source: "auto_review",
+      resultClassId: item.med.classId ?? undefined,
+      resultName: item.med.name,
+      expected: 1,
+      detected: 0,
+      unit: item.med.unit,
+      status: "identity",
+      feedback: "missing_expected",
+      session,
+      mealTiming,
+      detectorModel: "vaipe12n.onnx",
+    })
+  }
 
-  return [...unclear, ...unknown]
+  for (const item of result.unknownMeds) {
+    items.push({
+      id: `auto-ood-${item.id}`,
+      createdAt,
+      source: "auto_review",
+      resultName: item.name,
+      expected: item.expected,
+      unit: item.unit,
+      status: "unknown",
+      feedback: "ood_unknown",
+      session,
+      mealTiming,
+      detectorModel: "vaipe12n.onnx",
+    })
+  }
+
+  return items
+}
+
+function shouldReviewResult(result: Result): boolean {
+  return result.status !== "correct" || result.classId === 107
+}
+
+function reviewFeedback(result: Result): FeedbackValue {
+  if (result.classId === 107) return "ood_unknown"
+  if (result.status === "missing") return "missing_expected"
+  if (result.status === "extra") return "extra_unexpected"
+  if (result.status === "unclear") return "unclear"
+  return "correct"
+}
+
+function bestDetection(
+  detections: Detection[],
+  classId: number,
+): Detection | undefined {
+  return detections
+    .filter((item) => item.classId === classId)
+    .sort((a, b) => b.confidence - a.confidence)[0]
+}
+
+async function cropDetection(
+  imageUrl: string | null,
+  detection: Detection | undefined,
+): Promise<{ dataUrl: string; imageWidth: number; imageHeight: number } | null> {
+  if (!imageUrl || !detection) return null
+  const image = await loadImageForReview(imageUrl)
+  return image ? cropDetectionFromImage(image, detection) : null
+}
+
+async function loadImageForReview(src: string): Promise<HTMLImageElement | null> {
+  try {
+    const image = new Image()
+    image.crossOrigin = "anonymous"
+    image.src = src
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve()
+      image.onerror = () => reject(new Error("image load failed"))
+    })
+    return image
+  } catch {
+    return null
+  }
+}
+
+function cropDetectionFromImage(
+  image: HTMLImageElement,
+  detection: Detection,
+): { dataUrl: string; imageWidth: number; imageHeight: number } | null {
+  const imageWidth = image.naturalWidth
+  const imageHeight = image.naturalHeight
+  const box = clampBBox(detection.bbox, imageWidth, imageHeight)
+  if (box.w <= 0 || box.h <= 0) return null
+
+  try {
+    const canvas = document.createElement("canvas")
+    canvas.width = box.w
+    canvas.height = box.h
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return null
+
+    ctx.drawImage(image, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h)
+    return {
+      dataUrl: canvas.toDataURL("image/png"),
+      imageWidth,
+      imageHeight,
+    }
+  } catch {
+    return null
+  }
+}
+
+function clampBBox(
+  box: Detection["bbox"],
+  imageWidth: number,
+  imageHeight: number,
+): Detection["bbox"] {
+  const x = Math.max(0, Math.min(box.x, imageWidth))
+  const y = Math.max(0, Math.min(box.y, imageHeight))
+  const right = Math.max(x, Math.min(box.x + box.w, imageWidth))
+  const bottom = Math.max(y, Math.min(box.y + box.h, imageHeight))
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    w: Math.round(right - x),
+    h: Math.round(bottom - y),
+  }
+}
+
+function buildCaregiverSummary(
+  result: VerificationResult,
+  session: Session,
+  mealTiming: MealTiming,
+): string {
+  const status =
+    result.status === "pass"
+      ? "ĐẠT"
+      : result.status === "fail"
+        ? "KHÔNG ĐẠT"
+        : "CẦN KIỂM TRA"
+  const timing =
+    mealTiming === "before"
+      ? "trước ăn"
+      : mealTiming === "after"
+        ? "sau ăn"
+        : "tất cả thời điểm ăn"
+  const lines = [
+    "DOSE - Kết quả kiểm tra khay thuốc",
+    `Thời điểm: Buổi ${SESSION_LABELS[session]}, ${timing}`,
+    `Trạng thái: ${status}`,
+    result.status === "pass"
+      ? "Không phát hiện sai lệch."
+      : "Không nên uống cho đến khi đã kiểm tra lại.",
+    ...result.results
+      .filter((item) => item.status !== "correct")
+      .map(
+        (item) =>
+          `${statusLabel(item.status)}: ${item.name}, cần ${item.expected} ${item.unit}, thấy ${item.detected}.`,
+      ),
+    ...result.identityMeds
+      .filter((item) => !item.present)
+      .map((item) => `Không tìm thấy: ${item.med.name}.`),
+    ...result.unknownMeds.map(
+      (item) => `Thuốc chưa có trong model: ${item.name}, cần ${item.expected} ${item.unit}.`,
+    ),
+    `Thời gian: ${new Date().toLocaleString("vi-VN")}`,
+  ]
+
+  return lines.join("\n")
+}
+
+function statusLabel(status: Result["status"]): string {
+  if (status === "missing") return "Thiếu"
+  if (status === "extra") return "Thừa/ngoài đơn"
+  if (status === "unclear") return "Ảnh chưa rõ"
+  return "Khớp"
 }
 
 function StatusBanner({

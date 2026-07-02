@@ -1,6 +1,5 @@
 import type { Plan } from "@/lib/types"
-
-const PLANS_KEY = "dose:plans"
+import { PLANS_KEY } from "@/lib/onboarding"
 
 function isClient(): boolean {
   return typeof window !== "undefined"
@@ -59,6 +58,10 @@ export function upsertPlan(plan: Plan): void {
   const idx = plans.findIndex((p) => p.id === plan.id)
   if (idx >= 0) plans[idx] = plan
   else plans.push(plan)
+  savePlans(plans)
+}
+
+export function replacePlans(plans: Plan[]): void {
   savePlans(plans)
 }
 

@@ -26,11 +26,16 @@ function plan(medications: Medication[]): Plan {
   }
 }
 
-function detection(classId: number, confidence = 0.9): Detection {
+function detection(
+  classId: number,
+  confidence = 0.9,
+  overrides: Partial<Detection> = {},
+): Detection {
   return {
     classId,
     confidence,
     bbox: { x: 0, y: 0, w: 10, h: 10 },
+    ...overrides,
   }
 }
 
@@ -40,6 +45,15 @@ function run(
   session: Session = "morning",
 ) {
   return verify([plan(medications)], detections, session, null)
+}
+
+function runWithMealTiming(
+  medications: Medication[],
+  detections: Detection[],
+  mealTiming: "before" | "after",
+  session: Session = "morning",
+) {
+  return verify([plan(medications)], detections, session, mealTiming)
 }
 
 describe("verify", () => {
@@ -88,5 +102,54 @@ describe("verify", () => {
     )
 
     expect(result.unknownMeds[0].expected).toBe(1)
+  })
+
+  test("meal timing filter requires an exact match", () => {
+    const result = runWithMealTiming(
+      [
+        med({ classId: 1, mealTiming: null }),
+        med({ classId: 2, mealTiming: "before" }),
+      ],
+      [detection(2)],
+      "before",
+    )
+
+    expect(result.results.find((item) => item.classId === 2)?.status).toBe(
+      "correct",
+    )
+    expect(result.results.some((item) => item.classId === 1)).toBe(false)
+  })
+
+  test("labels unexpected model guesses as unknown for users", () => {
+    const result = run([med({ classId: 1 })], [detection(10)])
+    const extra = result.results.find((item) => item.status === "extra")
+
+    expect(extra?.name).toBe("Thuốc ngoài đơn / chưa xác định")
+    expect(extra?.modelName).toContain("novoxim")
+    expect(result.status).toBe("fail")
+  })
+
+  test("keeps known lookalike classes from passing on visual match alone", () => {
+    const result = run([med({ classId: 10 })], [detection(10)])
+
+    expect(result.results[0].status).toBe("unclear")
+    expect(result.results[0].safetyReason).toBe("visual_lookalike")
+    expect(result.status).toBe("fail")
+  })
+
+  test("weak model margins become unclear instead of correct", () => {
+    const result = run(
+      [med({ classId: 1 })],
+      [
+        detection(1, 0.9, {
+          uncertain: true,
+          margin: 0.05,
+          safetyReason: "weak_margin",
+        }),
+      ],
+    )
+
+    expect(result.results[0].status).toBe("unclear")
+    expect(result.results[0].safetyReason).toBe("weak_margin")
   })
 })

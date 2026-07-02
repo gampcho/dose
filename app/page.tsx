@@ -5,8 +5,8 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   RiAddLine,
-  RiMedicineBottleLine,
   RiArrowRightLine,
+  RiMedicineBottleLine,
   RiFileListLine,
   RiScanLine,
   RiSunLine,
@@ -18,17 +18,31 @@ import {
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
+import { QuickTourOverlay } from "@/components/common/quick-tour-overlay"
 import { listPlans, upsertPlan, generateId } from "@/lib/storage"
 import { PlanCard } from "@/components/common/plan-card"
+import {
+  HOME_TOUR_KEY,
+  finishHomeTour,
+  hasSeenOnboarding,
+  reopenHomeTour,
+  startPlanTour,
+} from "@/lib/onboarding"
 import type { Plan } from "@/lib/types"
 
 export default function HomePage() {
   const router = useRouter()
   const [plans, setPlans] = React.useState<Plan[]>([])
   const [mounted, setMounted] = React.useState(false)
+  const [showTour, setShowTour] = React.useState(false)
+  const [tourIndex, setTourIndex] = React.useState(0)
+  const [highlightRect, setHighlightRect] = React.useState<DOMRect | null>(null)
+
+  const helpRef = React.useRef<HTMLDivElement>(null)
+  const createRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
-    if (!localStorage.getItem("dose:onboarding_seen")) {
+    if (!hasSeenOnboarding()) {
       router.push("/guideline")
       return
     }
@@ -37,7 +51,13 @@ export default function HomePage() {
     setMounted(true)
   }, [router])
 
-  function handleCreate() {
+  React.useEffect(() => {
+    if (!mounted) return
+    if (localStorage.getItem(HOME_TOUR_KEY)) return
+    setShowTour(true)
+  }, [mounted])
+
+  function createPlan() {
     const all = listPlans()
     const plan: Plan = {
       id: generateId(),
@@ -46,7 +66,25 @@ export default function HomePage() {
       createdAt: new Date().toISOString(),
     }
     upsertPlan(plan)
+    return plan
+  }
+
+  function handleCreate() {
+    createPlan()
     setPlans(listPlans())
+  }
+
+  function handleGuidedCreate() {
+    const plan = createPlan()
+    startPlanTour(plan.id)
+    closeTour()
+    router.push(`/plan/${plan.id}`)
+  }
+
+  function openHomeTour() {
+    reopenHomeTour()
+    setTourIndex(0)
+    setShowTour(true)
   }
 
   const [now, setNow] = React.useState<Date | null>(null)
@@ -80,6 +118,69 @@ export default function HomePage() {
       second: "2-digit",
     }) ?? ""
 
+  const tourSteps = React.useMemo(
+    () => [
+      {
+        title: "Xem lại hướng dẫn bất cứ lúc nào",
+        description:
+          "Nếu cần xem lại cách dùng, bấm dấu hỏi ở góc trên để mở phần hướng dẫn đầy đủ.",
+        targetRef: helpRef,
+      },
+      {
+        title: "Thêm đơn thuốc mới",
+        description:
+          "Tạo một kế hoạch mới để lưu tên thuốc, liều uống và chuyển sang bước thêm thuốc.",
+        targetRef: createRef,
+      },
+    ],
+    [],
+  )
+
+  const activeStep = showTour ? tourSteps[tourIndex] : null
+
+  React.useEffect(() => {
+    if (!showTour || !activeStep) return
+
+    const updateRect = () => {
+      const node = activeStep.targetRef.current
+      if (!node) {
+        setHighlightRect(null)
+        return
+      }
+      node.scrollIntoView({ block: "center", behavior: "smooth" })
+      setHighlightRect(node.getBoundingClientRect())
+    }
+
+    const frame = window.requestAnimationFrame(updateRect)
+    window.addEventListener("resize", updateRect)
+    window.addEventListener("scroll", updateRect, true)
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener("resize", updateRect)
+      window.removeEventListener("scroll", updateRect, true)
+    }
+  }, [activeStep, showTour])
+
+  function finishTour() {
+    finishHomeTour()
+    closeTour()
+  }
+
+  function closeTour() {
+    setShowTour(false)
+    setTourIndex(0)
+    setHighlightRect(null)
+  }
+
+  function nextTourStep() {
+    if (tourIndex === tourSteps.length - 1) {
+      handleGuidedCreate()
+      return
+    }
+    setTourIndex((value) => value + 1)
+  }
+
   if (!mounted) {
     return (
       <div className="min-h-svh bg-background">
@@ -111,11 +212,11 @@ export default function HomePage() {
               DOSE
             </span>
           </div>
-          <Link href="/guideline">
-            <Button variant="ghost" size="icon-sm">
+          <div ref={helpRef}>
+            <Button variant="ghost" size="icon-sm" onClick={openHomeTour}>
               <RiQuestionLine />
             </Button>
-          </Link>
+          </div>
         </div>
       </header>
 
@@ -138,10 +239,12 @@ export default function HomePage() {
                 Thêm đơn thuốc để bắt đầu theo dõi và kiểm tra thuốc mỗi ngày.
               </p>
             </div>
-            <Button onClick={handleCreate}>
-              <RiAddLine />
-              Thêm đơn thuốc
-            </Button>
+            <div ref={createRef}>
+              <Button onClick={handleCreate}>
+                <RiAddLine />
+                Thêm đơn thuốc
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -161,26 +264,43 @@ export default function HomePage() {
                   className="w-full text-base"
                 >
                   <RiTimeLine />
-                  Thuốc cần uống ngay
+                  Xem lịch uống theo buổi
                   <RiArrowRightLine />
                 </Button>
               </Link>
             </div>
 
             {plans.map((plan, idx) => (
-              <PlanCard key={plan.id} plan={plan} index={idx + 1} />
+              <div key={plan.id}>
+                <PlanCard plan={plan} index={idx + 1} />
+              </div>
             ))}
 
-            <button
-              onClick={handleCreate}
-              className="flex w-full items-center justify-center gap-2 rounded-full border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
-            >
-              <RiAddLine className="size-4" />
-              Thêm đơn thuốc
-            </button>
+            <div ref={createRef}>
+              <button
+                onClick={handleCreate}
+                className="flex w-full items-center justify-center gap-2 rounded-full border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
+              >
+                <RiAddLine className="size-4" />
+                Thêm đơn thuốc
+              </button>
+            </div>
           </div>
         )}
       </main>
+
+      {showTour && activeStep && (
+        <QuickTourOverlay
+          rect={highlightRect}
+          step={activeStep}
+          index={tourIndex}
+          count={tourSteps.length}
+          onClose={finishTour}
+          onBack={tourIndex > 0 ? () => setTourIndex((value) => value - 1) : undefined}
+          onNext={nextTourStep}
+          nextLabel={tourIndex === tourSteps.length - 1 ? "Tạo đơn mới" : undefined}
+        />
+      )}
     </div>
   )
 }

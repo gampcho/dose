@@ -51,7 +51,13 @@ describe("getDueMedications", () => {
   test("filters by meal timing when selected", () => {
     const due = getDueMedications(plans, "morning", "after")
 
-    expect(due.map((item) => item.med.name)).toEqual(["Paracetamol"])
+    expect(due.map((item) => item.med.name)).toEqual([])
+  })
+
+  test("shows only exact meal-timing matches for before-meal view", () => {
+    const due = getDueMedications(plans, "morning", "before")
+
+    expect(due.map((item) => item.med.name)).toEqual(["Ebitac"])
   })
 })
 

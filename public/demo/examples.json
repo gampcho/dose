@@ -1,0 +1,565 @@
+{
+  "source": "dose-real-dataset-examples",
+  "schemaVersion": 3,
+  "description": "Original uncropped images sampled from cached Hugging Face VAIPE prescription and pill datasets. Pill examples are YOLO-audited: raw model detections match each image's unique dataset labels.",
+  "exampleCount": 24,
+  "datasets": [
+    "Elfsong/VAIPE_P",
+    "Elfsong/VAIPE_PILL"
+  ],
+  "pillClassCoverage": [
+    2,
+    8,
+    10,
+    14,
+    19,
+    37,
+    40,
+    43,
+    47,
+    54,
+    56,
+    61,
+    64,
+    79,
+    81,
+    87,
+    89,
+    91,
+    92,
+    97,
+    99,
+    107
+  ],
+  "examples": [
+    {
+      "id": "prescription_01",
+      "kind": "prescription_dataset_photo",
+      "file": "examples/prescription_01_VAIPE_P_TRAIN_0.jpg",
+      "sourceDataset": "Elfsong/VAIPE_P",
+      "sourceSplit": "train",
+      "sourceIndex": 0,
+      "sourceFilename": "VAIPE_P_TRAIN_0.png",
+      "width": 760,
+      "height": 1070,
+      "annotationCount": 38,
+      "textCount": 38,
+      "labels": [
+        "date",
+        "diagnose",
+        "drugname",
+        "other",
+        "quantity",
+        "usage"
+      ],
+      "verifiedBy": "huggingface-cache-original-image"
+    },
+    {
+      "id": "prescription_02",
+      "kind": "prescription_dataset_photo",
+      "file": "examples/prescription_02_VAIPE_P_TRAIN_1042.jpg",
+      "sourceDataset": "Elfsong/VAIPE_P",
+      "sourceSplit": "train",
+      "sourceIndex": 50,
+      "sourceFilename": "VAIPE_P_TRAIN_1042.png",
+      "width": 1150,
+      "height": 1600,
+      "annotationCount": 22,
+      "textCount": 22,
+      "labels": [
+        "date",
+        "diagnose",
+        "drugname",
+        "other",
+        "quantity",
+        "usage"
+      ],
+      "verifiedBy": "huggingface-cache-original-image"
+    },
+    {
+      "id": "prescription_03",
+      "kind": "prescription_dataset_photo",
+      "file": "examples/prescription_03_VAIPE_P_TRAIN_1088.jpg",
+      "sourceDataset": "Elfsong/VAIPE_P",
+      "sourceSplit": "train",
+      "sourceIndex": 100,
+      "sourceFilename": "VAIPE_P_TRAIN_1088.png",
+      "width": 760,
+      "height": 1070,
+      "annotationCount": 40,
+      "textCount": 40,
+      "labels": [
+        "date",
+        "diagnose",
+        "drugname",
+        "other",
+        "quantity",
+        "usage"
+      ],
+      "verifiedBy": "huggingface-cache-original-image"
+    },
+    {
+      "id": "prescription_04",
+      "kind": "prescription_dataset_photo",
+      "file": "examples/prescription_04_VAIPE_P_TRAIN_122.jpg",
+      "sourceDataset": "Elfsong/VAIPE_P",
+      "sourceSplit": "train",
+      "sourceIndex": 200,
+      "sourceFilename": "VAIPE_P_TRAIN_122.png",
+      "width": 760,
+      "height": 1070,
+      "annotationCount": 31,
+      "textCount": 31,
+      "labels": [
+        "date",
+        "diagnose",
+        "drugname",
+        "other",
+        "quantity"
+      ],
+      "verifiedBy": "huggingface-cache-original-image"
+    },
+    {
+      "id": "prescription_05",
+      "kind": "prescription_dataset_photo",
+      "file": "examples/prescription_05_VAIPE_P_TRAIN_212.jpg",
+      "sourceDataset": "Elfsong/VAIPE_P",
+      "sourceSplit": "train",
+      "sourceIndex": 300,
+      "sourceFilename": "VAIPE_P_TRAIN_212.png",
+      "width": 760,
+      "height": 1070,
+      "annotationCount": 30,
+      "textCount": 30,
+      "labels": [
+        "date",
+        "diagnose",
+        "drugname",
+        "other",
+        "quantity",
+        "usage"
+      ],
+      "verifiedBy": "huggingface-cache-original-image"
+    },
+    {
+      "id": "prescription_06",
+      "kind": "prescription_dataset_photo",
+      "file": "examples/prescription_06_VAIPE_P_TRAIN_302.jpg",
+      "sourceDataset": "Elfsong/VAIPE_P",
+      "sourceSplit": "train",
+      "sourceIndex": 400,
+      "sourceFilename": "VAIPE_P_TRAIN_302.png",
+      "width": 760,
+      "height": 1070,
+      "annotationCount": 37,
+      "textCount": 37,
+      "labels": [
+        "date",
+        "diagnose",
+        "drugname",
+        "other",
+        "quantity",
+        "usage"
+      ],
+      "verifiedBy": "huggingface-cache-original-image"
+    },
+    {
+      "id": "prescription_07",
+      "kind": "prescription_dataset_photo",
+      "file": "examples/prescription_07_VAIPE_P_TRAIN_393.jpg",
+      "sourceDataset": "Elfsong/VAIPE_P",
+      "sourceSplit": "train",
+      "sourceIndex": 500,
+      "sourceFilename": "VAIPE_P_TRAIN_393.png",
+      "width": 760,
+      "height": 1070,
+      "annotationCount": 38,
+      "textCount": 38,
+      "labels": [
+        "date",
+        "diagnose",
+        "drugname",
+        "other",
+        "quantity",
+        "usage"
+      ],
+      "verifiedBy": "huggingface-cache-original-image"
+    },
+    {
+      "id": "prescription_08",
+      "kind": "prescription_dataset_photo",
+      "file": "examples/prescription_08_VAIPE_P_TRAIN_528.jpg",
+      "sourceDataset": "Elfsong/VAIPE_P",
+      "sourceSplit": "train",
+      "sourceIndex": 650,
+      "sourceFilename": "VAIPE_P_TRAIN_528.png",
+      "width": 760,
+      "height": 1070,
+      "annotationCount": 35,
+      "textCount": 35,
+      "labels": [
+        "date",
+        "diagnose",
+        "drugname",
+        "other",
+        "quantity",
+        "usage"
+      ],
+      "verifiedBy": "huggingface-cache-original-image"
+    },
+    {
+      "id": "prescription_09",
+      "kind": "prescription_dataset_photo",
+      "file": "examples/prescription_09_VAIPE_P_TRAIN_663.jpg",
+      "sourceDataset": "Elfsong/VAIPE_P",
+      "sourceSplit": "train",
+      "sourceIndex": 800,
+      "sourceFilename": "VAIPE_P_TRAIN_663.png",
+      "width": 760,
+      "height": 1070,
+      "annotationCount": 36,
+      "textCount": 36,
+      "labels": [
+        "date",
+        "diagnose",
+        "drugname",
+        "other",
+        "quantity",
+        "usage"
+      ],
+      "verifiedBy": "huggingface-cache-original-image"
+    },
+    {
+      "id": "prescription_10",
+      "kind": "prescription_dataset_photo",
+      "file": "examples/prescription_10_VAIPE_P_TRAIN_799.jpg",
+      "sourceDataset": "Elfsong/VAIPE_P",
+      "sourceSplit": "train",
+      "sourceIndex": 950,
+      "sourceFilename": "VAIPE_P_TRAIN_799.png",
+      "width": 770,
+      "height": 1420,
+      "annotationCount": 36,
+      "textCount": 36,
+      "labels": [
+        "date",
+        "diagnose",
+        "drugname",
+        "other",
+        "quantity",
+        "usage"
+      ],
+      "verifiedBy": "huggingface-cache-original-image"
+    },
+    {
+      "id": "prescription_11",
+      "kind": "prescription_dataset_photo",
+      "file": "examples/prescription_11_VAIPE_P_TRAIN_933.jpg",
+      "sourceDataset": "Elfsong/VAIPE_P",
+      "sourceSplit": "train",
+      "sourceIndex": 1100,
+      "sourceFilename": "VAIPE_P_TRAIN_933.png",
+      "width": 760,
+      "height": 1070,
+      "annotationCount": 39,
+      "textCount": 39,
+      "labels": [
+        "date",
+        "diagnose",
+        "drugname",
+        "other",
+        "quantity",
+        "usage"
+      ],
+      "verifiedBy": "huggingface-cache-original-image"
+    },
+    {
+      "id": "prescription_12",
+      "kind": "prescription_dataset_photo",
+      "file": "examples/prescription_12_VAIPE_P_TRAIN_999.jpg",
+      "sourceDataset": "Elfsong/VAIPE_P",
+      "sourceSplit": "train",
+      "sourceIndex": 1172,
+      "sourceFilename": "VAIPE_P_TRAIN_999.png",
+      "width": 760,
+      "height": 1070,
+      "annotationCount": 37,
+      "textCount": 37,
+      "labels": [
+        "date",
+        "diagnose",
+        "drugname",
+        "other",
+        "quantity",
+        "usage"
+      ],
+      "verifiedBy": "huggingface-cache-original-image"
+    },
+    {
+      "id": "pill_01",
+      "kind": "pill_dataset_photo",
+      "file": "examples/pill_01_VAIPE_P_0_26.jpg",
+      "sourceDataset": "Elfsong/VAIPE_PILL",
+      "sourceSplit": "train",
+      "sourceShard": "train-00000-of-00124.parquet",
+      "sourceIndex": 19,
+      "sourceFilename": "VAIPE_P_0_26.jpg",
+      "width": 4032,
+      "height": 3024,
+      "classIds": [
+        47,
+        64
+      ],
+      "classNames": [
+        "renapril 5mg 5mg",
+        "hoạt huyết dưỡng não bdf 150mg+5mg"
+      ],
+      "boxCount": 3,
+      "verifiedBy": "yolo-raw-match-huggingface-cache-original-image"
+    },
+    {
+      "id": "pill_02",
+      "kind": "pill_dataset_photo",
+      "file": "examples/pill_02_VAIPE_P_1018_0.jpg",
+      "sourceDataset": "Elfsong/VAIPE_PILL",
+      "sourceSplit": "train",
+      "sourceShard": "train-00001-of-00124.parquet",
+      "sourceIndex": 11,
+      "sourceFilename": "VAIPE_P_1018_0.jpg",
+      "width": 302,
+      "height": 403,
+      "classIds": [
+        10,
+        64
+      ],
+      "classNames": [
+        "novoxim-500 0,5g",
+        "hoạt huyết dưỡng não bdf 150mg+5mg"
+      ],
+      "boxCount": 4,
+      "verifiedBy": "yolo-raw-match-huggingface-cache-original-image"
+    },
+    {
+      "id": "pill_03",
+      "kind": "pill_dataset_photo",
+      "file": "examples/pill_03_VAIPE_P_1029_0.jpg",
+      "sourceDataset": "Elfsong/VAIPE_PILL",
+      "sourceSplit": "train",
+      "sourceShard": "train-00001-of-00124.parquet",
+      "sourceIndex": 65,
+      "sourceFilename": "VAIPE_P_1029_0.jpg",
+      "width": 3024,
+      "height": 4032,
+      "classIds": [
+        61,
+        64,
+        81
+      ],
+      "classNames": [
+        "hapenxin capsules 0,5g",
+        "hoạt huyết dưỡng não bdf 150mg+5mg",
+        "meloxicam 7,5mg"
+      ],
+      "boxCount": 5,
+      "verifiedBy": "yolo-raw-match-huggingface-cache-original-image"
+    },
+    {
+      "id": "pill_04",
+      "kind": "pill_dataset_photo",
+      "file": "examples/pill_04_VAIPE_P_0_29.jpg",
+      "sourceDataset": "Elfsong/VAIPE_PILL",
+      "sourceSplit": "train",
+      "sourceShard": "train-00000-of-00124.parquet",
+      "sourceIndex": 22,
+      "sourceFilename": "VAIPE_P_0_29.jpg",
+      "width": 960,
+      "height": 1280,
+      "classIds": [
+        107
+      ],
+      "classNames": [
+        "ngoài đơn"
+      ],
+      "boxCount": 3,
+      "verifiedBy": "yolo-raw-match-huggingface-cache-original-image"
+    },
+    {
+      "id": "pill_05",
+      "kind": "pill_dataset_photo",
+      "file": "examples/pill_05_VAIPE_P_1000_0.jpg",
+      "sourceDataset": "Elfsong/VAIPE_PILL",
+      "sourceSplit": "train",
+      "sourceShard": "train-00000-of-00124.parquet",
+      "sourceIndex": 33,
+      "sourceFilename": "VAIPE_P_1000_0.jpg",
+      "width": 4000,
+      "height": 3000,
+      "classIds": [
+        43,
+        91
+      ],
+      "classNames": [
+        "cefadroxil 500mg 0,5g",
+        "panactol 500mg"
+      ],
+      "boxCount": 3,
+      "verifiedBy": "yolo-raw-match-huggingface-cache-original-image"
+    },
+    {
+      "id": "pill_06",
+      "kind": "pill_dataset_photo",
+      "file": "examples/pill_06_VAIPE_P_100_0.jpg",
+      "sourceDataset": "Elfsong/VAIPE_PILL",
+      "sourceSplit": "train",
+      "sourceShard": "train-00000-of-00124.parquet",
+      "sourceIndex": 43,
+      "sourceFilename": "VAIPE_P_100_0.jpg",
+      "width": 3024,
+      "height": 4032,
+      "classIds": [
+        14,
+        92
+      ],
+      "classNames": [
+        "leninarto 10 10mg",
+        "stacetam 800mg 800mg"
+      ],
+      "boxCount": 2,
+      "verifiedBy": "yolo-raw-match-huggingface-cache-original-image"
+    },
+    {
+      "id": "pill_07",
+      "kind": "pill_dataset_photo",
+      "file": "examples/pill_07_VAIPE_P_1023_0.jpg",
+      "sourceDataset": "Elfsong/VAIPE_PILL",
+      "sourceSplit": "train",
+      "sourceShard": "train-00001-of-00124.parquet",
+      "sourceIndex": 45,
+      "sourceFilename": "VAIPE_P_1023_0.jpg",
+      "width": 4032,
+      "height": 3024,
+      "classIds": [
+        2,
+        19,
+        91
+      ],
+      "classNames": [
+        "dixirein 375mg",
+        "cefadroxil 500mg 0,5g",
+        "panactol 500mg"
+      ],
+      "boxCount": 5,
+      "verifiedBy": "yolo-raw-match-huggingface-cache-original-image"
+    },
+    {
+      "id": "pill_08",
+      "kind": "pill_dataset_photo",
+      "file": "examples/pill_08_VAIPE_P_1012_0.jpg",
+      "sourceDataset": "Elfsong/VAIPE_PILL",
+      "sourceSplit": "train",
+      "sourceShard": "train-00000-of-00124.parquet",
+      "sourceIndex": 56,
+      "sourceFilename": "VAIPE_P_1012_0.jpg",
+      "width": 3024,
+      "height": 4032,
+      "classIds": [
+        56,
+        87
+      ],
+      "classNames": [
+        "meglucon 1000 1000mg",
+        "kagasdine 20mg"
+      ],
+      "boxCount": 2,
+      "verifiedBy": "yolo-raw-match-huggingface-cache-original-image"
+    },
+    {
+      "id": "pill_09",
+      "kind": "pill_dataset_photo",
+      "file": "examples/pill_09_VAIPE_P_1012_10.jpg",
+      "sourceDataset": "Elfsong/VAIPE_PILL",
+      "sourceSplit": "train",
+      "sourceShard": "train-00000-of-00124.parquet",
+      "sourceIndex": 58,
+      "sourceFilename": "VAIPE_P_1012_10.jpg",
+      "width": 3024,
+      "height": 4032,
+      "classIds": [
+        37,
+        79,
+        97
+      ],
+      "classNames": [
+        "golddicron 30mg",
+        "hangitor plus 40mg+12,5mg",
+        "chorlatcyn 125mg+50mg+50mg+25mg"
+      ],
+      "boxCount": 3,
+      "verifiedBy": "yolo-raw-match-huggingface-cache-original-image"
+    },
+    {
+      "id": "pill_10",
+      "kind": "pill_dataset_photo",
+      "file": "examples/pill_10_VAIPE_P_1013_0.jpg",
+      "sourceDataset": "Elfsong/VAIPE_PILL",
+      "sourceSplit": "train",
+      "sourceShard": "train-00000-of-00124.parquet",
+      "sourceIndex": 68,
+      "sourceFilename": "VAIPE_P_1013_0.jpg",
+      "width": 4128,
+      "height": 3096,
+      "classIds": [
+        8,
+        40,
+        89
+      ],
+      "classNames": [
+        "kavasdin 5 5mg",
+        "mezafen 60mg",
+        "mypara 500 500mg"
+      ],
+      "boxCount": 3,
+      "verifiedBy": "yolo-raw-match-huggingface-cache-original-image"
+    },
+    {
+      "id": "pill_11",
+      "kind": "pill_dataset_photo",
+      "file": "examples/pill_11_VAIPE_P_1014_0.jpg",
+      "sourceDataset": "Elfsong/VAIPE_PILL",
+      "sourceSplit": "train",
+      "sourceShard": "train-00000-of-00124.parquet",
+      "sourceIndex": 74,
+      "sourceFilename": "VAIPE_P_1014_0.jpg",
+      "width": 4032,
+      "height": 3024,
+      "classIds": [
+        99
+      ],
+      "classNames": [
+        "panactol 500mg"
+      ],
+      "boxCount": 1,
+      "verifiedBy": "yolo-raw-match-huggingface-cache-original-image"
+    },
+    {
+      "id": "pill_12",
+      "kind": "pill_dataset_photo",
+      "file": "examples/pill_12_VAIPE_P_1016_3.jpg",
+      "sourceDataset": "Elfsong/VAIPE_PILL",
+      "sourceSplit": "train",
+      "sourceShard": "train-00001-of-00124.parquet",
+      "sourceIndex": 4,
+      "sourceFilename": "VAIPE_P_1016_3.jpg",
+      "width": 4128,
+      "height": 3096,
+      "classIds": [
+        54
+      ],
+      "classNames": [
+        "glucofast 500 500mg"
+      ],
+      "boxCount": 1,
+      "verifiedBy": "yolo-raw-match-huggingface-cache-original-image"
+    }
+  ]
+}

@@ -11,7 +11,9 @@ describe("feedback helpers", () => {
           createdAt: "now",
           resultName: "paracetamol",
           status: "correct",
-          feedback: "correct",
+          feedback: "incorrect_count",
+          correctionCount: 2,
+          bbox: { x: 1, y: 2, w: 3, h: 4 },
         },
         { id: "bad", feedback: "correct" },
       ]),
@@ -30,6 +32,8 @@ describe("feedback helpers", () => {
     ])
 
     expect(exported.source).toBe("dose")
+    expect(exported.schemaVersion).toBe(2)
+    expect(exported.model.name).toBe("vaipe12n.onnx")
     expect(exported.items).toHaveLength(1)
   })
 })

@@ -9,14 +9,21 @@ import {
   RiCloseLine,
   RiRefreshLine,
   RiArrowRightLine,
+  RiVolumeUpLine,
+  RiStopCircleLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
 import { listPlans } from "@/lib/storage"
 import type { MealTiming } from "@/lib/types"
-
-const IMAGE_KEY = "dose:verify:global:image"
-const MEAL_KEY = "dose:verify:global:meal"
+import { speakVietnamese, stopSpeech } from "@/lib/speech"
+import {
+  VERIFY_IMAGE_KEY,
+  VERIFY_MEAL_KEY,
+  VERIFY_SESSION_KEY,
+} from "@/lib/onboarding"
+const CAPTURE_GUIDANCE =
+  "Hãy đặt các viên thuốc tách rời nhau trên khay. Chụp ở nơi đủ sáng, giữ điện thoại thẳng và đợi ảnh rõ nét trước khi bấm phân tích."
 
 export default function GlobalVerifyPage() {
   const router = useRouter()
@@ -29,11 +36,11 @@ export default function GlobalVerifyPage() {
   const cameraInputRef = React.useRef<HTMLInputElement>(null)
 
   function readSavedImage(): string | null {
-    const saved = sessionStorage.getItem(IMAGE_KEY)
+    const saved = sessionStorage.getItem(VERIFY_IMAGE_KEY)
     if (!saved) return null
     if (!saved.startsWith("blob:")) return saved
 
-    sessionStorage.removeItem(IMAGE_KEY)
+    sessionStorage.removeItem(VERIFY_IMAGE_KEY)
     return null
   }
 
@@ -50,7 +57,8 @@ export default function GlobalVerifyPage() {
     const url = URL.createObjectURL(file)
     setImagePreview(url)
     if (typeof window !== "undefined") {
-      sessionStorage.setItem(IMAGE_KEY, url)
+      sessionStorage.setItem(VERIFY_IMAGE_KEY, url)
+      sessionStorage.removeItem(VERIFY_SESSION_KEY)
     }
   }
 
@@ -62,16 +70,22 @@ export default function GlobalVerifyPage() {
 
   function clearImagePreview() {
     setImagePreview(null)
-    sessionStorage.removeItem(IMAGE_KEY)
+    sessionStorage.removeItem(VERIFY_IMAGE_KEY)
+    sessionStorage.removeItem(VERIFY_SESSION_KEY)
   }
 
   function handleVerify() {
     if (mealTiming && typeof window !== "undefined") {
-      sessionStorage.setItem(MEAL_KEY, mealTiming)
+      sessionStorage.setItem(VERIFY_MEAL_KEY, mealTiming)
     } else if (typeof window !== "undefined") {
-      sessionStorage.removeItem(MEAL_KEY)
+      sessionStorage.removeItem(VERIFY_MEAL_KEY)
     }
+    sessionStorage.removeItem(VERIFY_SESSION_KEY)
     router.push("/verify/report")
+  }
+
+  function speakCaptureGuidance() {
+    speakVietnamese(CAPTURE_GUIDANCE)
   }
 
   return (
@@ -158,6 +172,16 @@ export default function GlobalVerifyPage() {
                   Đổi ảnh
                 </Button>
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={speakCaptureGuidance}>
+                  <RiVolumeUpLine />
+                  Hướng dẫn
+                </Button>
+                <Button variant="outline" onClick={stopSpeech}>
+                  <RiStopCircleLine />
+                  Dừng đọc
+                </Button>
+              </div>
             </div>
           </div>
         ) : (
@@ -203,6 +227,16 @@ export default function GlobalVerifyPage() {
                   </span>
                 </div>
               </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" onClick={speakCaptureGuidance}>
+                <RiVolumeUpLine />
+                Nghe hướng dẫn
+              </Button>
+              <Button variant="outline" onClick={stopSpeech}>
+                <RiStopCircleLine />
+                Dừng đọc
+              </Button>
             </div>
           </div>
         )}
