@@ -4,21 +4,18 @@ import * as React from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
   RiArrowLeftLine,
+  RiArrowRightLine,
   RiAddLine,
   RiCameraLine,
   RiImageAddLine,
-  RiCloseLine,
-  RiCheckLine,
   RiSunLine,
   RiBowlLine,
   RiMoonLine,
-  RiCapsuleLine,
+  RiCheckLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import {
   Dialog,
@@ -30,415 +27,470 @@ import { MedicationCard } from "@/components/common/medication-card"
 import { SessionRow } from "@/components/common/session-row"
 import { getPlan, upsertPlan, generateId } from "@/lib/storage"
 import { ocr } from "@/lib/ocr"
-import { parsePrescription } from "@/lib/parser"
+import { parseWithLLM } from "@/lib/parser"
+import { loadCatalog, searchDrugs } from "@/lib/catalog"
+import { classifyOcrQuality } from "@/lib/ocr-quality"
+import { SESSION_LABELS } from "@/lib/types"
 import type {
-  TreatmentPlan,
+  Plan,
   Medication,
-  MedicationSession,
-  MedicationSchedule,
-  ScheduleMap,
+  ParsedMed,
+  Session,
+  MealTiming,
 } from "@/lib/types"
-import { SESSION_LABELS, defaultSchedules } from "@/lib/types"
 import type { TextBox } from "@/lib/ocr"
 
-const SESSIONS: {
-  key: MedicationSession
-  label: string
-  icon: React.ReactNode
-}[] = [
-  {
-    key: "morning",
-    label: SESSION_LABELS["morning"],
-    icon: <RiSunLine className="size-4" />,
-  },
-  {
-    key: "noon",
-    label: SESSION_LABELS["noon"],
-    icon: <RiBowlLine className="size-4" />,
-  },
-  {
-    key: "afternoon",
-    label: SESSION_LABELS["afternoon"],
-    icon: <RiSunLine className="size-4 opacity-60" />,
-  },
-  {
-    key: "evening",
-    label: SESSION_LABELS["evening"],
-    icon: <RiMoonLine className="size-4" />,
-  },
+const SESSIONS: { key: Session; label: string; icon: React.ReactNode }[] = [
+  { key: "morning", label: SESSION_LABELS.morning, icon: <RiSunLine className="size-4" /> },
+  { key: "noon", label: SESSION_LABELS.noon, icon: <RiBowlLine className="size-4" /> },
+  { key: "afternoon", label: SESSION_LABELS.afternoon, icon: <RiSunLine className="size-4 opacity-60" /> },
+  { key: "evening", label: SESSION_LABELS.evening, icon: <RiMoonLine className="size-4" /> },
 ]
+
+type DoseState = Record<Session, { enabled: boolean; pillCount: number }>
+
+function emptyDoses(): DoseState {
+  return {
+    morning: { enabled: false, pillCount: 1 },
+    noon: { enabled: false, pillCount: 1 },
+    afternoon: { enabled: false, pillCount: 1 },
+    evening: { enabled: false, pillCount: 1 },
+  }
+}
+
+function dosesFromMed(med: Medication): DoseState {
+  const s = emptyDoses()
+  for (const d of med.doses) s[d.session as Session] = { enabled: true, pillCount: d.pillCount }
+  return s
+}
 
 export default function TreatmentDetailPage() {
   const params = useParams()
   const router = useRouter()
   const planId = params.id as string
 
-  const [plan, setPlan] = React.useState<TreatmentPlan | null>(
-    () => getPlan(planId) ?? null,
-  )
-  const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [plan, setPlan] = React.useState<Plan | null>(null)
+  const [loaded, setLoaded] = React.useState(false)
 
-  // Add medication form state
-  const [step, setStep] = React.useState<"upload" | "form">("upload")
+  React.useEffect(() => {
+    const p = getPlan(planId)
+    if (!p) { router.push("/"); return }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from localStorage on mount
+    setPlan(p)
+    setLoaded(true)
+  }, [planId, router])
+
+  const [dialogOpen, setDialogOpen] = React.useState(false)
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
-  const [medName, setMedName] = React.useState("")
-  const [notes, setNotes] = React.useState("")
-  const [schedules, setSchedules] =
-    React.useState<ScheduleMap>(defaultSchedules())
-  const [rawText, setRawText] = React.useState("")
   const [ocrLoading, setOcrLoading] = React.useState(false)
-  const [parsedMeds, setParsedMeds] = React.useState<
-    { drugName: string; quantity: number; dosage: string; instructions: string }[]
-  >([])
+  const [ocrError, setOcrError] = React.useState<string | null>(null)
+  const [ocrWarning, setOcrWarning] = React.useState<string | null>(null)
+
+  const [medName, setMedName] = React.useState("")
+  const [classId, setClassId] = React.useState<number | null>(null)
+  const [doses, setDoses] = React.useState<DoseState>(emptyDoses())
+  const [mealTiming, setMealTiming] = React.useState<MealTiming>(null)
+  const [notes, setNotes] = React.useState("")
+  const [suggestions, setSuggestions] = React.useState<{ name: string; classIds: number[] }[]>([])
+  const [parsedMeds, setParsedMeds] = React.useState<ParsedMed[]>([])
+
+  const [editMed, setEditMed] = React.useState<Medication | null>(null)
+  const [editName, setEditName] = React.useState("")
+  const [editDoses, setEditDoses] = React.useState<DoseState>(emptyDoses())
+  const [editMealTiming, setEditMealTiming] = React.useState<MealTiming>(null)
+  const [editNotes, setEditNotes] = React.useState("")
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const cameraInputRef = React.useRef<HTMLInputElement>(null)
 
-  React.useEffect(() => {
-    if (!plan) router.push("/")
-  }, [plan, router])
-
-  async function handleFile(file: File) {
+  async function handleOcr(file: File) {
     const url = URL.createObjectURL(file)
     setImagePreview(url)
-    setStep("form")
     setOcrLoading(true)
-    setRawText("")
+    setOcrError(null)
 
     try {
       const img = new Image()
       img.src = url
       await new Promise<void>((resolve, reject) => {
         img.onload = () => resolve()
-        img.onerror = () => reject(new Error("Cannot load image"))
+        img.onerror = () => reject(new Error("Không thể tải ảnh"))
       })
 
       const results: TextBox[] = await ocr(img)
-      const text = results.map((r) => r.text).join("\n")
-      setRawText(text || "Không nhận diện được văn bản")
+      const quality = classifyOcrQuality(results)
 
-      const parsed = parsePrescription(results.map((r) => r.text))
-      setParsedMeds(parsed)
-
-      if (parsed.length > 0) {
-        setMedName(parsed[0].drugName)
-        if (parsed[0].instructions) {
-          setNotes(parsed[0].instructions)
-        }
+      if (!quality.shouldParse) {
+        setOcrError(quality.message)
+        return
       }
-    } catch (e) {
-      setRawText("Lỗi OCR: " + (e instanceof Error ? e.message : "Không xác định"))
+
+      setOcrWarning(quality.status === "low_confidence" ? quality.message : null)
+
+      await loadCatalog()
+      const parsed = await parseWithLLM(quality.text)
+
+      if (parsed.length === 0) {
+        setOcrError("Không nhận diện được thuốc, vui lòng nhập tay")
+        return
+      }
+
+      setParsedMeds(parsed)
+      fillFormWithMed(parsed[0])
+    } catch {
+      setOcrError("Không đọc được đơn thuốc, vui lòng nhập tay")
     } finally {
       setOcrLoading(false)
     }
   }
 
+  function fillFormWithMed(p: ParsedMed) {
+    setMedName(p.name)
+    setClassId(p.classId)
+    const ds = emptyDoses()
+    for (const d of p.doses) ds[d.session as Session] = { enabled: true, pillCount: d.pillCount }
+    setDoses(ds)
+    setMealTiming(p.mealTiming)
+  }
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (file) handleFile(file)
+    if (file) handleOcr(file)
+    e.target.value = ""
   }
 
-  function toggleSession(key: MedicationSession) {
-    setSchedules((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], enabled: !prev[key].enabled },
-    }))
+  function updateSuggestions(name: string) {
+    setMedName(name)
+    if (name.length < 2) { setSuggestions([]); setClassId(null); return }
+    setSuggestions(searchDrugs(name))
+    setClassId(null)
   }
 
-  function setPillCount(key: MedicationSession, delta: number) {
-    setSchedules((prev) => ({
-      ...prev,
-      [key]: {
-        ...prev[key],
-        pillCount: Math.max(1, prev[key].pillCount + delta),
-      },
-    }))
+  function pickSuggestion(s: { name: string; classIds: number[] }) {
+    setMedName(s.name)
+    setClassId(s.classIds[0])
+    setSuggestions([])
   }
 
   function resetForm() {
-    setStep("upload")
     setImagePreview(null)
     setMedName("")
+    setClassId(null)
+    setDoses(emptyDoses())
+    setMealTiming(null)
     setNotes("")
-    setSchedules(defaultSchedules())
-    setRawText("")
+    setSuggestions([])
     setParsedMeds([])
+    setOcrError(null)
+    setOcrWarning(null)
   }
 
-  function handleOpenDialog() {
-    resetForm()
-    setDialogOpen(true)
+  function saveMeds(meds: Medication[]) {
+    if (!plan) return
+    const updated: Plan = { ...plan, medications: [...plan.medications, ...meds] }
+    upsertPlan(updated)
+    setPlan(updated)
   }
 
-  const enabledSchedules = Object.entries(schedules).filter(
-    ([, s]) => s.enabled,
-  )
-  const canSave = medName.trim() && enabledSchedules.length > 0
+  function handleSave() {
+    if (!plan || !medName.trim()) return
+    const enabled = Object.entries(doses).filter(([, s]) => s.enabled)
 
-  function handleSaveMed() {
-    if (!plan || !canSave) return
-    const schedulesOut: MedicationSchedule[] = enabledSchedules.map(
-      ([key, s]) => ({
-        session: key as MedicationSession,
-        pillCount: s.pillCount,
-        notes: notes.trim() || undefined,
-      }),
-    )
     const med: Medication = {
       id: generateId(),
       name: medName.trim(),
-      schedules: schedulesOut,
-      instructions: rawText.trim(),
+      classId,
+      doses: enabled.map(([key, s]) => ({ session: key as Session, pillCount: s.pillCount })),
+      mealTiming,
+      unit: "viên",
+      notes: notes.trim(),
       createdAt: new Date().toISOString(),
     }
-    const updated = { ...plan, medications: [...plan.medications, med] }
-    upsertPlan(updated)
-    setPlan(updated)
+    saveMeds([med])
+    setDialogOpen(false)
+    resetForm()
+  }
+
+  function handleSaveAll() {
+    if (!plan || parsedMeds.length === 0) return
+    const meds: Medication[] = parsedMeds.map((p) => {
+      const activeDoses = p.doses.map((d: { session: Session; pillCount: number }) => ({ session: d.session, pillCount: d.pillCount }))
+      return {
+        id: generateId(),
+        name: p.name,
+        classId: p.classId,
+        doses: activeDoses,
+        mealTiming: p.mealTiming,
+        unit: p.unit,
+        notes: "",
+        createdAt: new Date().toISOString(),
+      }
+    })
+    saveMeds(meds)
     setDialogOpen(false)
     resetForm()
   }
 
   function handleDeleteMed(medId: string) {
     if (!plan) return
-    const updated = {
-      ...plan,
-      medications: plan.medications.filter((m) => m.id !== medId),
-    }
+    const updated: Plan = { ...plan, medications: plan.medications.filter((m) => m.id !== medId) }
     upsertPlan(updated)
     setPlan(updated)
   }
 
-  if (!plan) return null
+  function openEdit(med: Medication) {
+    setEditMed(med)
+    setEditName(med.name)
+    setEditDoses(dosesFromMed(med))
+    setEditMealTiming(med.mealTiming)
+    setEditNotes(med.notes)
+  }
+
+  function handleSaveEdit() {
+    if (!plan || !editMed || !editName.trim()) return
+    const enabled = Object.entries(editDoses).filter(([, s]) => s.enabled)
+    const updated: Plan = {
+      ...plan,
+      medications: plan.medications.map((m) =>
+        m.id !== editMed.id ? m : {
+          ...m,
+          name: editName.trim(),
+          doses: enabled.map(([key, s]) => ({ session: key as Session, pillCount: s.pillCount })),
+          mealTiming: editMealTiming,
+          notes: editNotes.trim(),
+        },
+      ),
+    }
+    upsertPlan(updated)
+    setPlan(updated)
+    setEditMed(null)
+  }
+
+  function toggleDose(key: Session, state: DoseState, setState: (s: DoseState) => void) {
+    setState({ ...state, [key]: { ...state[key], enabled: !state[key].enabled } })
+  }
+
+  function adjustPillCount(key: Session, delta: number, state: DoseState, setState: (s: DoseState) => void) {
+    setState({ ...state, [key]: { ...state[key], pillCount: Math.max(1, state[key].pillCount + delta) } })
+  }
+
+  if (!loaded || !plan) return null
+
+  const canSave = medName.trim().length > 0
 
   return (
     <div className="min-h-svh bg-background">
-      {/* Header */}
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => router.push("/")}
-            >
+            <Button variant="ghost" size="icon-sm" onClick={() => router.push("/")}>
               <RiArrowLeftLine />
             </Button>
-            <span className="font-heading text-base font-medium">
-              {plan.name}
-            </span>
+            <span className="font-heading text-base font-medium">{plan.name}</span>
           </div>
           {plan.medications.length > 0 && (
-            <Button size="sm" onClick={handleOpenDialog}>
-              <RiAddLine />
-              Thêm thuốc
+            <Button size="sm" onClick={() => { resetForm(); loadCatalog(); setDialogOpen(true) }}>
+              <RiAddLine /> Thêm thuốc
             </Button>
           )}
         </div>
       </header>
 
       <main className="mx-auto max-w-lg px-4 py-6">
-        {plan.medications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed py-16 text-center">
-            <div className="flex size-12 items-center justify-center rounded-2xl bg-muted">
-              <RiCapsuleLine className="size-6 text-muted-foreground" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <p className="font-medium">Chưa có thuốc nào</p>
-              <p className="text-sm text-muted-foreground">
-                Thêm thuốc vào liệu trình này để bắt đầu theo dõi.
-              </p>
-            </div>
-            <Button onClick={handleOpenDialog}>
-              <RiAddLine />
-              Thêm thuốc
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {plan.medications.map((med) => (
-              <MedicationCard
-                key={med.id}
-                med={med}
-                onDeleteAction={() => handleDeleteMed(med.id)}
-              />
-            ))}
-            <button
-              onClick={handleOpenDialog}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
-            >
-              <RiAddLine className="size-4" />
-              Thêm thuốc
-            </button>
-          </div>
-        )}
+        <div className="flex flex-col gap-3">
+          {plan.medications.map((med) => (
+            <MedicationCard
+              key={med.id}
+              med={med}
+              onEdit={() => openEdit(med)}
+              onDelete={() => handleDeleteMed(med.id)}
+            />
+          ))}
+          <button
+            onClick={() => { resetForm(); loadCatalog(); setDialogOpen(true) }}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
+          >
+            <RiAddLine className="size-4" /> Thêm thuốc
+          </button>
+        </div>
       </main>
 
-      {/* Dialog thêm thuốc */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Thêm thuốc mới</DialogTitle>
+            <DialogTitle>Thêm thuốc</DialogTitle>
           </DialogHeader>
 
-          {step === "upload" ? (
-            <div className="flex flex-col gap-4">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex min-h-36 w-full flex-col items-center justify-center gap-2.5 rounded-xl border-2 border-dashed border-border bg-muted/30 transition-colors hover:border-primary/50 hover:bg-muted/50"
-              >
-                <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-                  <RiImageAddLine className="size-5 text-muted-foreground" />
-                </div>
-                <div className="flex flex-col items-center gap-0.5">
-                  <span className="text-sm font-medium">
-                    Chọn ảnh đơn thuốc
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    JPG, PNG, HEIC...
-                  </span>
-                </div>
-              </button>
-
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => cameraInputRef.current?.click()}
-              >
-                <RiCameraLine />
-                Chụp ảnh trực tiếp
+          <div className="flex flex-col gap-4">
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => fileInputRef.current?.click()}>
+                <RiImageAddLine /> Ảnh đơn thuốc
               </Button>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-
-              <div className="flex items-center gap-3">
-                <Separator className="flex-1" />
-                <span className="text-xs text-muted-foreground">hoặc</span>
-                <Separator className="flex-1" />
-              </div>
-
-              <Button
-                variant="ghost"
-                className="w-full"
-                onClick={() => setStep("form")}
-              >
-                Nhập thủ công
+              <Button variant="outline" className="flex-1" onClick={() => cameraInputRef.current?.click()}>
+                <RiCameraLine /> Chụp
               </Button>
             </div>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {imagePreview && (
-                <div className="relative overflow-hidden rounded-xl border">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={imagePreview}
-                    alt="Đơn thuốc"
-                    className="max-h-40 w-full bg-muted/30 object-contain"
-                  />
-                  <Button
-                    variant="secondary"
-                    size="icon-sm"
-                    className="absolute top-2 right-2"
-                    onClick={() => {
-                      setImagePreview(null)
-                      setStep("upload")
-                    }}
+
+            {imagePreview && (
+              <div className="relative overflow-hidden rounded-xl border">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imagePreview} alt="" className="max-h-32 w-full object-contain bg-muted/30" />
+              </div>
+            )}
+
+            {ocrLoading && (
+              <p className="text-center text-sm text-muted-foreground">Đang đọc đơn thuốc...</p>
+            )}
+
+            {ocrError && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                {ocrError}
+              </div>
+            )}
+
+            {ocrWarning && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                {ocrWarning}
+              </div>
+            )}
+
+            {parsedMeds.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                    Thuốc tìm thấy ({parsedMeds.length})
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleSaveAll}
+                    className="text-xs font-medium text-primary hover:underline"
                   >
-                    <RiCloseLine />
-                  </Button>
-                  <div className="border-t bg-muted/50 px-3 py-2">
-                    <p className="text-xs text-muted-foreground">
-                      {ocrLoading
-                        ? "Đang đọc đơn thuốc..."
-                        : rawText
-                          ? `Đã đọc ${rawText.split("\n").filter((l) => l.trim()).length} dòng`
-                          : "Chưa có kết quả OCR"}
-                    </p>
-                  </div>
+                    Lưu tất cả
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {parsedMeds.map((p, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => fillFormWithMed(p)}
+                      className="flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm hover:bg-muted/40"
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">{p.name}</span>
+                        {p.doses.length > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            {p.doses.map((d: { session: Session; pillCount: number }) => `${SESSION_LABELS[d.session]} ${d.pillCount}${p.unit}`).join(", ")}
+                          </span>
+                        )}
+                      </div>
+                      <RiArrowRightLine className="size-4 shrink-0 text-muted-foreground" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
+
+            <div className="flex items-center gap-3">
+              <Separator className="flex-1" />
+              <span className="text-xs text-muted-foreground">hoặc nhập tay</span>
+              <Separator className="flex-1" />
+            </div>
+
+            <div className="flex flex-col gap-1.5 relative">
+              <label className="text-sm font-medium">
+                Tên thuốc <span className="text-destructive">*</span>
+              </label>
+              <Input
+                placeholder="VD: Paracetamol 500mg"
+                value={medName}
+                onChange={(e) => updateSuggestions(e.target.value)}
+                autoFocus
+              />
+              {suggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 z-20 mt-1 rounded-lg border bg-background shadow-lg">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.name}
+                      type="button"
+                      className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-muted"
+                      onClick={() => pickSuggestion(s)}
+                    >
+                      <span>{s.name}</span>
+                    </button>
+                  ))}
                 </div>
               )}
+            </div>
 
-              {imagePreview && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">
-                    Nội dung đọc được
-                  </label>
-                  <textarea
-                    className="min-h-16 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
-                    placeholder={
-                      ocrLoading
-                        ? "Đang đọc..."
-                        : "OCR sẽ điền tự động. Bạn có thể chỉnh sửa."
-                    }
-                    value={rawText}
-                    onChange={(e) => setRawText(e.target.value)}
-                    disabled={ocrLoading}
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">
+                Buổi uống <span className="font-normal text-muted-foreground">(tùy chọn)</span>
+              </label>
+              {SESSIONS.map(({ key, label, icon }) => {
+                const s = doses[key]
+                return (
+                  <SessionRow
+                    key={key}
+                    label={label}
+                    icon={icon}
+                    enabled={s.enabled}
+                    pillCount={s.pillCount}
+                    unit="viên"
+                    onToggle={() => toggleDose(key, doses, setDoses)}
+                    onDecrease={() => adjustPillCount(key, -1, doses, setDoses)}
+                    onIncrease={() => adjustPillCount(key, 1, doses, setDoses)}
                   />
-                </div>
+                )
+              })}
+            </div>
+
+            <MealTimingPicker value={mealTiming} onChange={setMealTiming} />
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">
+                Lưu ý <span className="font-normal text-muted-foreground">(tùy chọn)</span>
+              </label>
+              <Input placeholder="VD: Uống sau ăn..." value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+
+            <div className="flex gap-2 pb-1">
+              <Button variant="outline" className="flex-1" onClick={() => { setDialogOpen(false); resetForm() }}>
+                Hủy
+              </Button>
+              {parsedMeds.length > 1 ? (
+                <Button className="flex-1" onClick={handleSaveAll}>
+                  <RiCheckLine /> Lưu tất cả
+                </Button>
+              ) : (
+                <Button className="flex-1" disabled={!canSave} onClick={handleSave}>
+                  <RiCheckLine /> Lưu thuốc
+                </Button>
               )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-              {parsedMeds.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">
-                    Thuốc phát hiện ({parsedMeds.length})
-                  </label>
-                  <div className="flex flex-col gap-1.5">
-                    {parsedMeds.map((med, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => {
-                          setMedName(med.drugName)
-                          if (med.instructions) setNotes(med.instructions)
-                        }}
-                        className="rounded-lg border bg-muted/40 px-3 py-2 text-left text-xs transition-colors hover:border-primary/50 hover:bg-muted/60"
-                      >
-                        <p className="font-medium">{med.drugName}</p>
-                        <p className="text-muted-foreground">
-                          {med.quantity > 0 ? `${med.quantity} viên` : ""}
-                          {med.dosage ? ` · ${med.dosage}` : ""}
-                          {med.instructions ? ` · ${med.instructions}` : ""}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <Separator />
-
+      <Dialog open={!!editMed} onOpenChange={(o) => { if (!o) setEditMed(null) }}>
+        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Chỉnh sửa thuốc</DialogTitle>
+          </DialogHeader>
+          {editMed && (
+            <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">
-                  Tên thuốc <span className="text-destructive">*</span>
-                </label>
-                <Input
-                  placeholder="VD: Paracetamol 500mg"
-                  value={medName}
-                  onChange={(e) => setMedName(e.target.value)}
-                  autoFocus={!imagePreview}
-                />
+                <label className="text-sm font-medium">Tên thuốc</label>
+                <Input value={editName} onChange={(e) => setEditName(e.target.value)} autoFocus />
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium">
-                  Buổi uống <span className="text-destructive">*</span>
-                </label>
+                <label className="text-sm font-medium">Buổi uống</label>
                 {SESSIONS.map(({ key, label, icon }) => {
-                  const s = schedules[key]
+                  const s = editDoses[key]
                   return (
                     <SessionRow
                       key={key}
@@ -446,66 +498,62 @@ export default function TreatmentDetailPage() {
                       icon={icon}
                       enabled={s.enabled}
                       pillCount={s.pillCount}
-                      onToggle={() => toggleSession(key)}
-                      onDecrease={() => setPillCount(key, -1)}
-                      onIncrease={() => setPillCount(key, 1)}
+                      unit={editMed?.unit ?? "viên"}
+                      onToggle={() => toggleDose(key, editDoses, setEditDoses)}
+                      onDecrease={() => adjustPillCount(key, -1, editDoses, setEditDoses)}
+                      onIncrease={() => adjustPillCount(key, 1, editDoses, setEditDoses)}
                     />
                   )
                 })}
               </div>
 
+              <MealTimingPicker value={editMealTiming} onChange={setEditMealTiming} />
+
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">Lưu ý</label>
-                <Input
-                  placeholder="VD: Uống sau ăn..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
+                <label className="text-sm font-medium">
+                  Lưu ý <span className="font-normal text-muted-foreground">(tùy chọn)</span>
+                </label>
+                <Input placeholder="VD: Uống sau ăn..." value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
               </div>
 
-              {canSave && (
-                <Card>
-                  <CardContent className="py-3">
-                    <p className="font-medium">{medName}</p>
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {SESSIONS.filter(({ key }) => schedules[key].enabled).map(
-                        ({ key, label }) => (
-                          <Badge key={key} variant="secondary">
-                            {label} · {schedules[key].pillCount} viên
-                          </Badge>
-                        ),
-                      )}
-                    </div>
-                    {notes && (
-                      <p className="mt-1.5 text-xs text-muted-foreground">
-                        {notes}
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
               <div className="flex gap-2 pb-1">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setDialogOpen(false)}
-                >
+                <Button variant="outline" className="flex-1" onClick={() => setEditMed(null)}>
                   Hủy
                 </Button>
-                <Button
-                  className="flex-1"
-                  disabled={!canSave}
-                  onClick={handleSaveMed}
-                >
-                  <RiCheckLine />
-                  Lưu thuốc
+                <Button className="flex-1" disabled={!editName.trim()} onClick={handleSaveEdit}>
+                  <RiCheckLine /> Lưu thay đổi
                 </Button>
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function MealTimingPicker({ value, onChange }: { value: MealTiming; onChange: (v: MealTiming) => void }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="text-sm font-medium">
+        Thời điểm uống <span className="font-normal text-muted-foreground">(tùy chọn)</span>
+      </label>
+      <div className="flex gap-2">
+        {(["before", "after"] as const).map((val) => (
+          <button
+            key={val}
+            type="button"
+            onClick={() => onChange(value === val ? null : val)}
+            className={`flex-1 rounded-lg border py-2 text-sm transition-colors ${
+              value === val
+                ? "border-primary bg-primary/10 font-medium text-primary"
+                : "border-border bg-background text-muted-foreground hover:bg-muted/40"
+            }`}
+          >
+            {val === "before" ? "Trước ăn" : "Sau ăn"}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

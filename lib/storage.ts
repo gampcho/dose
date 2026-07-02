@@ -1,63 +1,70 @@
-import type { TreatmentPlan, DoseLog } from "@/lib/types"
+import type { Plan } from "@/lib/types"
 
 const PLANS_KEY = "dose:plans"
-const LOGS_KEY = "dose:logs"
 
-export function getPlans(): TreatmentPlan[] {
-  if (typeof window === "undefined") return []
+function isClient(): boolean {
+  return typeof window !== "undefined"
+}
+
+export function listPlans(): Plan[] {
+  if (!isClient()) return []
   try {
-    return JSON.parse(localStorage.getItem(PLANS_KEY) ?? "[]")
+    const raw: unknown = JSON.parse(localStorage.getItem(PLANS_KEY) ?? "[]")
+    if (!Array.isArray(raw)) return []
+    return raw.map(migratePlan) as Plan[]
   } catch {
     return []
   }
 }
 
-export function savePlans(plans: TreatmentPlan[]): void {
+function migratePlan(p: Record<string, unknown>) {
+  const meds = Array.isArray(p.medications)
+    ? (p.medications as Record<string, unknown>[]).map(migrateMed)
+    : []
+  return {
+    id: String(p.id ?? ""),
+    name: String(p.name ?? ""),
+    medications: meds,
+    createdAt: String(p.createdAt ?? ""),
+  }
+}
+
+function migrateMed(m: Record<string, unknown>) {
+  return {
+    id: String(m.id ?? ""),
+    name: String(m.name ?? ""),
+    classId: typeof m.classId === "number" ? m.classId : null,
+    doses: (m as { doses?: unknown; schedules?: unknown }).doses
+      ?? (m as { schedules?: unknown }).schedules
+      ?? [],
+    mealTiming: m.mealTiming ?? null,
+    unit: typeof m.unit === "string" ? m.unit : "viên",
+    notes: String(m.notes ?? ""),
+    createdAt: String(m.createdAt ?? ""),
+  }
+}
+
+function savePlans(plans: Plan[]): void {
+  if (!isClient()) return
   localStorage.setItem(PLANS_KEY, JSON.stringify(plans))
 }
 
-export function getPlan(id: string): TreatmentPlan | undefined {
-  return getPlans().find((p) => p.id === id)
+export function getPlan(id: string): Plan | undefined {
+  return listPlans().find((p) => p.id === id)
 }
 
-export function upsertPlan(plan: TreatmentPlan): void {
-  const plans = getPlans()
+export function upsertPlan(plan: Plan): void {
+  const plans = listPlans()
   const idx = plans.findIndex((p) => p.id === plan.id)
-  if (idx >= 0) {
-    plans[idx] = plan
-  } else {
-    plans.push(plan)
-  }
+  if (idx >= 0) plans[idx] = plan
+  else plans.push(plan)
   savePlans(plans)
 }
 
 export function deletePlan(id: string): void {
-  savePlans(getPlans().filter((p) => p.id !== id))
-}
-
-export function getLogs(): DoseLog[] {
-  if (typeof window === "undefined") return []
-  try {
-    return JSON.parse(localStorage.getItem(LOGS_KEY) ?? "[]")
-  } catch {
-    return []
-  }
-}
-
-export function saveLogs(logs: DoseLog[]): void {
-  localStorage.setItem(LOGS_KEY, JSON.stringify(logs))
-}
-
-export function getTodayLogs(date: string): DoseLog[] {
-  return getLogs().filter((l) => l.date === date)
-}
-
-export function addLog(log: DoseLog): void {
-  const logs = getLogs()
-  logs.push(log)
-  saveLogs(logs)
+  savePlans(listPlans().filter((p) => p.id !== id))
 }
 
 export function generateId(): string {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+  return crypto.randomUUID()
 }

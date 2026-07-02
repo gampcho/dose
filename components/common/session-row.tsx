@@ -11,6 +11,7 @@ export function SessionRow({
   icon,
   enabled,
   pillCount,
+  unit,
   onToggle,
   onDecrease,
   onIncrease,
@@ -19,6 +20,7 @@ export function SessionRow({
   icon: React.ReactNode
   enabled: boolean
   pillCount: number
+  unit: string
   onToggle: () => void
   onDecrease: () => void
   onIncrease: () => void
@@ -66,7 +68,7 @@ export function SessionRow({
           <Button variant="outline" size="icon-xs" onClick={onIncrease}>
             <RiAddLine />
           </Button>
-          <span className="text-sm text-muted-foreground">viên</span>
+          <span className="text-sm text-muted-foreground">{unit}</span>
         </div>
       )}
     </div>

@@ -1,5 +1,19 @@
 import Tesseract from "tesseract.js"
 
+interface PaddleOcrResult {
+  text: string
+  confidence: number
+  box: { x: number; y: number; width: number; height: number }
+}
+
+interface PaddleOcrService {
+  recognize(input: {
+    width: number
+    height: number
+    data: Uint8Array
+  }): Promise<PaddleOcrResult[]>
+}
+
 export interface TextBox {
   bbox: { x: number; y: number; w: number; h: number }
   text: string
@@ -17,18 +31,18 @@ function getTessWorker(): Promise<Tesseract.Worker> {
   return tessWorkerPromise
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let paddleService: { recognize: (input: any) => Promise<any[]> } | null = null
+let paddleService: PaddleOcrService | null = null
 
-async function getPaddleService() {
+async function getPaddleService(): Promise<PaddleOcrService> {
   if (!paddleService) {
     const { PaddleOcrService } = await import("paddleocr")
     const ort = await import("onnxruntime-web/wasm")
     ort.env.wasm.numThreads = 1
     ort.env.wasm.wasmPaths = "/"
 
-    const [detBytes, dictRes] = await Promise.all([
+    const [detBytes, recBytes, dictRes] = await Promise.all([
       fetch("/models/det.onnx").then((r) => r.arrayBuffer()),
+      fetch("/models/rec.onnx").then((r) => r.arrayBuffer()),
       fetch("/models/dict.txt").then((r) => r.text()),
     ])
 
@@ -37,7 +51,7 @@ async function getPaddleService() {
     paddleService = await PaddleOcrService.createInstance({
       ort,
       detection: { modelBuffer: detBytes },
-      recognition: { charactersDictionary: dict },
+      recognition: { modelBuffer: recBytes, charactersDictionary: dict },
     })
   }
   return paddleService
@@ -65,13 +79,7 @@ async function ocrPaddleDetect(
   const h = canvas.height
   const imageData = canvas.getContext("2d")!.getImageData(0, 0, w, h)
 
-  type PaddleResult = {
-    text: string
-    confidence: number
-    box: { x: number; y: number; width: number; height: number }
-  }
-
-  const results: PaddleResult[] = await service.recognize({
+  const results = await service.recognize({
     width: w,
     height: h,
     data: new Uint8Array(imageData.data),
