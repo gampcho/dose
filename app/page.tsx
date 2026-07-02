@@ -6,10 +6,7 @@ import {
   RiAddLine,
   RiMedicineBottleLine,
   RiArrowRightLine,
-  RiDeleteBinLine,
-  RiCapsuleLine,
   RiFileListLine,
-  RiSettings3Line,
   RiScanLine,
   RiSunLine,
   RiSunFoggyLine,
@@ -18,9 +15,8 @@ import {
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { listPlans, upsertPlan, deletePlan, generateId } from "@/lib/storage"
+import { listPlans, upsertPlan, generateId } from "@/lib/storage"
+import { PlanCard } from "@/components/common/plan-card"
 import type { Plan } from "@/lib/types"
 
 export default function HomePage() {
@@ -42,12 +38,6 @@ export default function HomePage() {
       createdAt: new Date().toISOString(),
     }
     upsertPlan(plan)
-    setPlans(listPlans())
-  }
-
-  function handleDelete(id: string, e: React.MouseEvent) {
-    e.preventDefault()
-    deletePlan(id)
     setPlans(listPlans())
   }
 
@@ -155,7 +145,6 @@ export default function HomePage() {
                 key={plan.id}
                 plan={plan}
                 index={idx + 1}
-                onDelete={(e) => handleDelete(plan.id, e)}
               />
             ))}
 
@@ -170,72 +159,5 @@ export default function HomePage() {
         )}
       </main>
     </div>
-  )
-}
-
-function PlanCard({
-  plan,
-  index,
-  onDelete,
-}: {
-  plan: Plan
-  index: number
-  onDelete: (e: React.MouseEvent) => void
-}) {
-  const medCount = plan.medications.length
-
-  return (
-    <Card>
-      <CardContent className="flex items-center gap-4 py-4">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <span className="font-heading text-sm font-bold text-primary">
-            {index}
-          </span>
-        </div>
-
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <p className="leading-snug font-medium">{plan.name}</p>
-          <div className="flex items-center gap-2">
-            {medCount === 0 ? (
-              <span className="text-xs text-muted-foreground">
-                Chưa có thuốc
-              </span>
-            ) : (
-              <>
-                <RiCapsuleLine className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  {medCount} loại thuốc
-                </span>
-                <div className="flex flex-wrap gap-1">
-                  {plan.medications.map((med) => (
-                    <Badge key={med.id} variant="secondary" className="text-xs">
-                      {med.name}
-                    </Badge>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0 text-muted-foreground hover:text-destructive"
-          onClick={onDelete}
-        >
-          <RiDeleteBinLine />
-        </Button>
-      </CardContent>
-
-      <CardFooter className="gap-2">
-        <Link href={`/plan/${plan.id}`} className="flex-1">
-          <Button variant="outline" size="sm" className="w-full">
-            <RiSettings3Line />
-            Quản lý thuốc
-          </Button>
-        </Link>
-      </CardFooter>
-    </Card>
   )
 }
