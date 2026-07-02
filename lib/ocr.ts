@@ -29,7 +29,10 @@ let tessWorkerPromise: Promise<Tesseract.Worker> | null = null
 
 function getTessWorker(): Promise<Tesseract.Worker> {
   if (!tessWorkerPromise) {
-    tessWorkerPromise = createTessWorker()
+    tessWorkerPromise = createTessWorker().catch((error) => {
+      tessWorkerPromise = null
+      throw error
+    })
   }
   return tessWorkerPromise
 }
@@ -53,12 +56,23 @@ async function createTessWorker(): Promise<Tesseract.Worker> {
 }
 
 let paddleService: PaddleOcrService | null = null
+let paddleServicePromise: Promise<PaddleOcrService> | null = null
 
 async function getPaddleService(): Promise<PaddleOcrService> {
-  if (!paddleService) {
-    paddleService = await createPaddleService()
+  if (paddleService) return paddleService
+
+  if (!paddleServicePromise) {
+    paddleServicePromise = createPaddleService()
+      .then((service) => {
+        paddleService = service
+        return service
+      })
+      .catch((error) => {
+        paddleServicePromise = null
+        throw error
+      })
   }
-  return paddleService
+  return paddleServicePromise
 }
 
 async function createPaddleService(): Promise<PaddleOcrService> {
@@ -198,4 +212,21 @@ export async function ocr(
   }
 
   return results
+}
+
+let preloadPromise: Promise<void> | null = null
+
+export function preloadOcr(): Promise<void> {
+  if (!preloadPromise) {
+    preloadPromise = Promise.all([
+      getPaddleService(),
+      getTessWorker(),
+    ])
+      .then(() => undefined)
+      .catch((error) => {
+        preloadPromise = null
+        throw error
+      })
+  }
+  return preloadPromise
 }

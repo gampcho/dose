@@ -26,7 +26,7 @@ import {
 import { MedicationCard } from "@/components/common/medication-card"
 import { SessionRow } from "@/components/common/session-row"
 import { getPlan, upsertPlan, generateId } from "@/lib/storage"
-import { ocr } from "@/lib/ocr"
+import { ocr, preloadOcr } from "@/lib/ocr"
 import { parseWithLLM } from "@/lib/parser"
 import { loadCatalog, searchDrugs } from "@/lib/catalog"
 import { classifyOcrQuality } from "@/lib/ocr-quality"
@@ -99,6 +99,23 @@ export default function PlanDetailPage() {
     setPlan(p)
     setLoaded(true)
   }, [planId, router])
+
+  React.useEffect(() => {
+    if (!loaded) return
+
+    const preload = () => {
+      void Promise.all([preloadOcr(), loadCatalog()])
+        .catch((error) => console.warn("OCR preload failed", error))
+    }
+
+    if ("requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(preload, { timeout: 3000 })
+      return () => window.cancelIdleCallback(id)
+    }
+
+    const id = setTimeout(preload, 1000)
+    return () => clearTimeout(id)
+  }, [loaded])
 
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
