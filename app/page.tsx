@@ -15,6 +15,7 @@ import {
   RiSunFoggyLine,
   RiMoonLine,
   RiMoonFoggyLine,
+  RiQuestionLine,
 } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
@@ -107,6 +108,11 @@ export default function HomePage() {
             </div>
             <span className="font-heading text-lg font-semibold tracking-tight">DOSE</span>
           </div>
+          <Link href="/guideline">
+            <Button variant="ghost" size="icon-sm">
+              <RiQuestionLine />
+            </Button>
+          </Link>
         </div>
       </header>
 
