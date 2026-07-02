@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   RiAddLine,
   RiMedicineBottleLine,
@@ -21,14 +22,19 @@ import { PlanCard } from "@/components/common/plan-card"
 import type { Plan } from "@/lib/types"
 
 export default function HomePage() {
+  const router = useRouter()
   const [plans, setPlans] = React.useState<Plan[]>([])
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
+    if (!localStorage.getItem("dose:onboarding_seen")) {
+      router.push("/guideline")
+      return
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from localStorage on mount
     setPlans(listPlans())
     setMounted(true)
-  }, [])
+  }, [router])
 
   function handleCreate() {
     const all = listPlans()

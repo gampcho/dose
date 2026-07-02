@@ -175,8 +175,12 @@ export default function GuidelinePage() {
   }
 
   function goNext() {
-    if (isLast) router.push("/")
-    else setIndex(index + 1)
+    if (isLast) {
+      localStorage.setItem("dose:onboarding_seen", "1")
+      router.push("/")
+    } else {
+      setIndex(index + 1)
+    }
   }
 
   // Tap left half of the content area = back, right half = next.
@@ -192,7 +196,10 @@ export default function GuidelinePage() {
           {slide.badge}
         </span>
         <button
-          onClick={() => router.push("/")}
+          onClick={() => {
+            localStorage.setItem("dose:onboarding_seen", "1")
+            router.push("/")
+          }}
           className="text-base text-muted-foreground hover:text-foreground"
         >
           Bỏ qua
@@ -220,7 +227,9 @@ export default function GuidelinePage() {
               key={detail.text}
               className="flex items-start gap-3 rounded-xl bg-muted/50 px-4 py-3"
             >
-              <detail.icon className={cn("mt-0.5 size-5 shrink-0", detail.iconClass)} />
+              <detail.icon
+                className={cn("mt-0.5 size-5 shrink-0", detail.iconClass)}
+              />
               <p className="text-left text-base leading-snug">{detail.text}</p>
             </div>
           ))}
@@ -256,7 +265,7 @@ export default function GuidelinePage() {
             Quay lại
           </Button>
         )}
-        <Button size="lg" className="h-14 flex-[2] text-lg" onClick={goNext}>
+        <Button size="lg" className="h-14 flex-2 text-lg" onClick={goNext}>
           {isLast ? "Bắt đầu sử dụng" : "Tiếp theo"}
           <RiArrowRightLine className="size-5" />
         </Button>
