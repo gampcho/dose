@@ -41,10 +41,26 @@ import type {
 import type { TextBox } from "@/lib/ocr"
 
 const SESSIONS: { key: Session; label: string; icon: React.ReactNode }[] = [
-  { key: "morning", label: SESSION_LABELS.morning, icon: <RiSunLine className="size-4" /> },
-  { key: "noon", label: SESSION_LABELS.noon, icon: <RiBowlLine className="size-4" /> },
-  { key: "afternoon", label: SESSION_LABELS.afternoon, icon: <RiSunLine className="size-4 opacity-60" /> },
-  { key: "evening", label: SESSION_LABELS.evening, icon: <RiMoonLine className="size-4" /> },
+  {
+    key: "morning",
+    label: SESSION_LABELS.morning,
+    icon: <RiSunLine className="size-4" />,
+  },
+  {
+    key: "noon",
+    label: SESSION_LABELS.noon,
+    icon: <RiBowlLine className="size-4" />,
+  },
+  {
+    key: "afternoon",
+    label: SESSION_LABELS.afternoon,
+    icon: <RiSunLine className="size-4 opacity-60" />,
+  },
+  {
+    key: "evening",
+    label: SESSION_LABELS.evening,
+    icon: <RiMoonLine className="size-4" />,
+  },
 ]
 
 type DoseState = Record<Session, { enabled: boolean; pillCount: number }>
@@ -60,11 +76,12 @@ function emptyDoses(): DoseState {
 
 function dosesFromMed(med: Medication): DoseState {
   const s = emptyDoses()
-  for (const d of med.doses) s[d.session as Session] = { enabled: true, pillCount: d.pillCount }
+  for (const d of med.doses)
+    s[d.session as Session] = { enabled: true, pillCount: d.pillCount }
   return s
 }
 
-export default function TreatmentDetailPage() {
+export default function PlanDetailPage() {
   const params = useParams()
   const router = useRouter()
   const planId = params.id as string
@@ -74,7 +91,10 @@ export default function TreatmentDetailPage() {
 
   React.useEffect(() => {
     const p = getPlan(planId)
-    if (!p) { router.push("/"); return }
+    if (!p) {
+      router.push("/")
+      return
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from localStorage on mount
     setPlan(p)
     setLoaded(true)
@@ -91,7 +111,9 @@ export default function TreatmentDetailPage() {
   const [doses, setDoses] = React.useState<DoseState>(emptyDoses())
   const [mealTiming, setMealTiming] = React.useState<MealTiming>(null)
   const [notes, setNotes] = React.useState("")
-  const [suggestions, setSuggestions] = React.useState<{ name: string; classIds: number[] }[]>([])
+  const [suggestions, setSuggestions] = React.useState<
+    { name: string; classIds: number[] }[]
+  >([])
   const [parsedMeds, setParsedMeds] = React.useState<ParsedMed[]>([])
 
   const [editMed, setEditMed] = React.useState<Medication | null>(null)
@@ -125,7 +147,9 @@ export default function TreatmentDetailPage() {
         return
       }
 
-      setOcrWarning(quality.status === "low_confidence" ? quality.message : null)
+      setOcrWarning(
+        quality.status === "low_confidence" ? quality.message : null,
+      )
 
       await loadCatalog()
       const parsed = await parseWithLLM(quality.text)
@@ -148,7 +172,8 @@ export default function TreatmentDetailPage() {
     setMedName(p.name)
     setClassId(p.classId)
     const ds = emptyDoses()
-    for (const d of p.doses) ds[d.session as Session] = { enabled: true, pillCount: d.pillCount }
+    for (const d of p.doses)
+      ds[d.session as Session] = { enabled: true, pillCount: d.pillCount }
     setDoses(ds)
     setMealTiming(p.mealTiming)
   }
@@ -161,7 +186,11 @@ export default function TreatmentDetailPage() {
 
   function updateSuggestions(name: string) {
     setMedName(name)
-    if (name.length < 2) { setSuggestions([]); setClassId(null); return }
+    if (name.length < 2) {
+      setSuggestions([])
+      setClassId(null)
+      return
+    }
     setSuggestions(searchDrugs(name))
     setClassId(null)
   }
@@ -187,7 +216,10 @@ export default function TreatmentDetailPage() {
 
   function saveMeds(meds: Medication[]) {
     if (!plan) return
-    const updated: Plan = { ...plan, medications: [...plan.medications, ...meds] }
+    const updated: Plan = {
+      ...plan,
+      medications: [...plan.medications, ...meds],
+    }
     upsertPlan(updated)
     setPlan(updated)
   }
@@ -200,7 +232,10 @@ export default function TreatmentDetailPage() {
       id: generateId(),
       name: medName.trim(),
       classId,
-      doses: enabled.map(([key, s]) => ({ session: key as Session, pillCount: s.pillCount })),
+      doses: enabled.map(([key, s]) => ({
+        session: key as Session,
+        pillCount: s.pillCount,
+      })),
       mealTiming,
       unit: "viên",
       notes: notes.trim(),
@@ -214,7 +249,12 @@ export default function TreatmentDetailPage() {
   function handleSaveAll() {
     if (!plan || parsedMeds.length === 0) return
     const meds: Medication[] = parsedMeds.map((p) => {
-      const activeDoses = p.doses.map((d: { session: Session; pillCount: number }) => ({ session: d.session, pillCount: d.pillCount }))
+      const activeDoses = p.doses.map(
+        (d: { session: Session; pillCount: number }) => ({
+          session: d.session,
+          pillCount: d.pillCount,
+        }),
+      )
       return {
         id: generateId(),
         name: p.name,
@@ -233,7 +273,10 @@ export default function TreatmentDetailPage() {
 
   function handleDeleteMed(medId: string) {
     if (!plan) return
-    const updated: Plan = { ...plan, medications: plan.medications.filter((m) => m.id !== medId) }
+    const updated: Plan = {
+      ...plan,
+      medications: plan.medications.filter((m) => m.id !== medId),
+    }
     upsertPlan(updated)
     setPlan(updated)
   }
@@ -252,13 +295,18 @@ export default function TreatmentDetailPage() {
     const updated: Plan = {
       ...plan,
       medications: plan.medications.map((m) =>
-        m.id !== editMed.id ? m : {
-          ...m,
-          name: editName.trim(),
-          doses: enabled.map(([key, s]) => ({ session: key as Session, pillCount: s.pillCount })),
-          mealTiming: editMealTiming,
-          notes: editNotes.trim(),
-        },
+        m.id !== editMed.id
+          ? m
+          : {
+              ...m,
+              name: editName.trim(),
+              doses: enabled.map(([key, s]) => ({
+                session: key as Session,
+                pillCount: s.pillCount,
+              })),
+              mealTiming: editMealTiming,
+              notes: editNotes.trim(),
+            },
       ),
     }
     upsertPlan(updated)
@@ -266,12 +314,30 @@ export default function TreatmentDetailPage() {
     setEditMed(null)
   }
 
-  function toggleDose(key: Session, state: DoseState, setState: (s: DoseState) => void) {
-    setState({ ...state, [key]: { ...state[key], enabled: !state[key].enabled } })
+  function toggleDose(
+    key: Session,
+    state: DoseState,
+    setState: (s: DoseState) => void,
+  ) {
+    setState({
+      ...state,
+      [key]: { ...state[key], enabled: !state[key].enabled },
+    })
   }
 
-  function adjustPillCount(key: Session, delta: number, state: DoseState, setState: (s: DoseState) => void) {
-    setState({ ...state, [key]: { ...state[key], pillCount: Math.max(1, state[key].pillCount + delta) } })
+  function adjustPillCount(
+    key: Session,
+    delta: number,
+    state: DoseState,
+    setState: (s: DoseState) => void,
+  ) {
+    setState({
+      ...state,
+      [key]: {
+        ...state[key],
+        pillCount: Math.max(1, state[key].pillCount + delta),
+      },
+    })
   }
 
   if (!loaded || !plan) return null
@@ -283,13 +349,26 @@ export default function TreatmentDetailPage() {
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon-sm" onClick={() => router.push("/")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => router.push("/")}
+            >
               <RiArrowLeftLine />
             </Button>
-            <span className="font-heading text-base font-medium">{plan.name}</span>
+            <span className="font-heading text-base font-medium">
+              {plan.name}
+            </span>
           </div>
           {plan.medications.length > 0 && (
-            <Button size="sm" onClick={() => { resetForm(); loadCatalog(); setDialogOpen(true) }}>
+            <Button
+              size="sm"
+              onClick={() => {
+                resetForm()
+                loadCatalog()
+                setDialogOpen(true)
+              }}
+            >
               <RiAddLine /> Thêm thuốc
             </Button>
           )}
@@ -307,7 +386,11 @@ export default function TreatmentDetailPage() {
             />
           ))}
           <button
-            onClick={() => { resetForm(); loadCatalog(); setDialogOpen(true) }}
+            onClick={() => {
+              resetForm()
+              loadCatalog()
+              setDialogOpen(true)
+            }}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
           >
             <RiAddLine className="size-4" /> Thêm thuốc
@@ -323,10 +406,18 @@ export default function TreatmentDetailPage() {
 
           <div className="flex flex-col gap-4">
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => fileInputRef.current?.click()}>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => fileInputRef.current?.click()}
+              >
                 <RiImageAddLine /> Ảnh đơn thuốc
               </Button>
-              <Button variant="outline" className="flex-1" onClick={() => cameraInputRef.current?.click()}>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => cameraInputRef.current?.click()}
+              >
                 <RiCameraLine /> Chụp
               </Button>
             </div>
@@ -334,12 +425,18 @@ export default function TreatmentDetailPage() {
             {imagePreview && (
               <div className="relative overflow-hidden rounded-xl border">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imagePreview} alt="" className="max-h-32 w-full object-contain bg-muted/30" />
+                <img
+                  src={imagePreview}
+                  alt=""
+                  className="max-h-32 w-full bg-muted/30 object-contain"
+                />
               </div>
             )}
 
             {ocrLoading && (
-              <p className="text-center text-sm text-muted-foreground">Đang đọc đơn thuốc...</p>
+              <p className="text-center text-sm text-muted-foreground">
+                Đang đọc đơn thuốc...
+              </p>
             )}
 
             {ocrError && (
@@ -380,7 +477,12 @@ export default function TreatmentDetailPage() {
                         <span className="font-medium">{p.name}</span>
                         {p.doses.length > 0 && (
                           <span className="text-xs text-muted-foreground">
-                            {p.doses.map((d: { session: Session; pillCount: number }) => `${SESSION_LABELS[d.session]} ${d.pillCount}${p.unit}`).join(", ")}
+                            {p.doses
+                              .map(
+                                (d: { session: Session; pillCount: number }) =>
+                                  `${SESSION_LABELS[d.session]} ${d.pillCount}${p.unit}`,
+                              )
+                              .join(", ")}
                           </span>
                         )}
                       </div>
@@ -391,16 +493,31 @@ export default function TreatmentDetailPage() {
               </div>
             )}
 
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleFileChange}
+            />
 
             <div className="flex items-center gap-3">
               <Separator className="flex-1" />
-              <span className="text-xs text-muted-foreground">hoặc nhập tay</span>
+              <span className="text-xs text-muted-foreground">
+                hoặc nhập tay
+              </span>
               <Separator className="flex-1" />
             </div>
 
-            <div className="flex flex-col gap-1.5 relative">
+            <div className="relative flex flex-col gap-1.5">
               <label className="text-sm font-medium">
                 Tên thuốc <span className="text-destructive">*</span>
               </label>
@@ -411,7 +528,7 @@ export default function TreatmentDetailPage() {
                 autoFocus
               />
               {suggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-20 mt-1 rounded-lg border bg-background shadow-lg">
+                <div className="absolute top-full right-0 left-0 z-20 mt-1 rounded-lg border bg-background shadow-lg">
                   {suggestions.map((s) => (
                     <button
                       key={s.name}
@@ -428,7 +545,10 @@ export default function TreatmentDetailPage() {
 
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium">
-                Buổi uống <span className="font-normal text-muted-foreground">(tùy chọn)</span>
+                Buổi uống{" "}
+                <span className="font-normal text-muted-foreground">
+                  (tùy chọn)
+                </span>
               </label>
               {SESSIONS.map(({ key, label, icon }) => {
                 const s = doses[key]
@@ -452,13 +572,27 @@ export default function TreatmentDetailPage() {
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">
-                Lưu ý <span className="font-normal text-muted-foreground">(tùy chọn)</span>
+                Lưu ý{" "}
+                <span className="font-normal text-muted-foreground">
+                  (tùy chọn)
+                </span>
               </label>
-              <Input placeholder="VD: Uống sau ăn..." value={notes} onChange={(e) => setNotes(e.target.value)} />
+              <Input
+                placeholder="VD: Uống sau ăn..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
             </div>
 
             <div className="flex gap-2 pb-1">
-              <Button variant="outline" className="flex-1" onClick={() => { setDialogOpen(false); resetForm() }}>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setDialogOpen(false)
+                  resetForm()
+                }}
+              >
                 Hủy
               </Button>
               {parsedMeds.length > 1 ? (
@@ -466,7 +600,11 @@ export default function TreatmentDetailPage() {
                   <RiCheckLine /> Lưu tất cả
                 </Button>
               ) : (
-                <Button className="flex-1" disabled={!canSave} onClick={handleSave}>
+                <Button
+                  className="flex-1"
+                  disabled={!canSave}
+                  onClick={handleSave}
+                >
                   <RiCheckLine /> Lưu thuốc
                 </Button>
               )}
@@ -475,7 +613,12 @@ export default function TreatmentDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!editMed} onOpenChange={(o) => { if (!o) setEditMed(null) }}>
+      <Dialog
+        open={!!editMed}
+        onOpenChange={(o) => {
+          if (!o) setEditMed(null)
+        }}
+      >
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Chỉnh sửa thuốc</DialogTitle>
@@ -484,7 +627,11 @@ export default function TreatmentDetailPage() {
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Tên thuốc</label>
-                <Input value={editName} onChange={(e) => setEditName(e.target.value)} autoFocus />
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  autoFocus
+                />
               </div>
 
               <div className="flex flex-col gap-2">
@@ -500,27 +647,49 @@ export default function TreatmentDetailPage() {
                       pillCount={s.pillCount}
                       unit={editMed?.unit ?? "viên"}
                       onToggle={() => toggleDose(key, editDoses, setEditDoses)}
-                      onDecrease={() => adjustPillCount(key, -1, editDoses, setEditDoses)}
-                      onIncrease={() => adjustPillCount(key, 1, editDoses, setEditDoses)}
+                      onDecrease={() =>
+                        adjustPillCount(key, -1, editDoses, setEditDoses)
+                      }
+                      onIncrease={() =>
+                        adjustPillCount(key, 1, editDoses, setEditDoses)
+                      }
                     />
                   )
                 })}
               </div>
 
-              <MealTimingPicker value={editMealTiming} onChange={setEditMealTiming} />
+              <MealTimingPicker
+                value={editMealTiming}
+                onChange={setEditMealTiming}
+              />
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">
-                  Lưu ý <span className="font-normal text-muted-foreground">(tùy chọn)</span>
+                  Lưu ý{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (tùy chọn)
+                  </span>
                 </label>
-                <Input placeholder="VD: Uống sau ăn..." value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+                <Input
+                  placeholder="VD: Uống sau ăn..."
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                />
               </div>
 
               <div className="flex gap-2 pb-1">
-                <Button variant="outline" className="flex-1" onClick={() => setEditMed(null)}>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setEditMed(null)}
+                >
                   Hủy
                 </Button>
-                <Button className="flex-1" disabled={!editName.trim()} onClick={handleSaveEdit}>
+                <Button
+                  className="flex-1"
+                  disabled={!editName.trim()}
+                  onClick={handleSaveEdit}
+                >
                   <RiCheckLine /> Lưu thay đổi
                 </Button>
               </div>
@@ -532,11 +701,18 @@ export default function TreatmentDetailPage() {
   )
 }
 
-function MealTimingPicker({ value, onChange }: { value: MealTiming; onChange: (v: MealTiming) => void }) {
+function MealTimingPicker({
+  value,
+  onChange,
+}: {
+  value: MealTiming
+  onChange: (v: MealTiming) => void
+}) {
   return (
     <div className="flex flex-col gap-2">
       <label className="text-sm font-medium">
-        Thời điểm uống <span className="font-normal text-muted-foreground">(tùy chọn)</span>
+        Thời điểm uống{" "}
+        <span className="font-normal text-muted-foreground">(tùy chọn)</span>
       </label>
       <div className="flex gap-2">
         {(["before", "after"] as const).map((val) => (
