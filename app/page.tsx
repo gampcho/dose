@@ -117,23 +117,12 @@ export default function HomePage() {
       </header>
 
       <main className="mx-auto max-w-lg px-4 py-6">
-        <div className="mb-6">
+        <div className="mb-4">
           <p className="flex items-center gap-1.5 text-sm text-muted-foreground capitalize">
             <TimeIcon className="size-4 shrink-0" />
             {today} · {time}
           </p>
-          <h1 className="mt-0.5 font-heading text-2xl font-bold tracking-tight">
-            Đơn thuốc
-          </h1>
         </div>
-
-        <Link href="/verify" className="mb-6 block">
-          <Button size="lg" className="w-full text-base">
-            <RiScanLine />
-            Kiểm tra khay thuốc hôm nay
-            <RiArrowRightLine />
-          </Button>
-        </Link>
 
         {plans.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-dashed py-16 text-center">
@@ -153,6 +142,14 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
+            <Link href="/verify" className="mb-6 block">
+              <Button size="lg" className="w-full text-base">
+                <RiScanLine />
+                Kiểm tra khay thuốc hôm nay
+                <RiArrowRightLine />
+              </Button>
+            </Link>
+
             {plans.map((plan, idx) => (
               <PlanCard
                 key={plan.id}
